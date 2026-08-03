@@ -340,14 +340,9 @@ void ios_biometric_authenticate(const char* creason) {
     // Diagnostic: lets the frontend confirm this delegate is actually running on
     // the device (i.e. the build includes the foreground-presentation fix).
     mfEmit(@"common:notification", @{@"ok": @YES, @"presented": @YES});
-    if (@available(iOS 14.0, *)) {
-        completionHandler(UNNotificationPresentationOptionBanner
-                          | UNNotificationPresentationOptionList
-                          | UNNotificationPresentationOptionSound);
-    } else {
-        completionHandler(UNNotificationPresentationOptionAlert
-                          | UNNotificationPresentationOptionSound);
-    }
+    completionHandler(UNNotificationPresentationOptionBanner
+                      | UNNotificationPresentationOptionList
+                      | UNNotificationPresentationOptionSound);
 }
 
 // Called when the user taps a delivered notification.
@@ -567,12 +562,7 @@ void ios_get_location(void) {
             g_mfLocationManager.delegate = g_mfLocationDelegate;
             g_mfLocationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters;
         }
-        CLAuthorizationStatus status;
-        if (@available(iOS 14.0, *)) {
-            status = g_mfLocationManager.authorizationStatus;
-        } else {
-            status = [CLLocationManager authorizationStatus];
-        }
+        CLAuthorizationStatus status = g_mfLocationManager.authorizationStatus;
         if (status == kCLAuthorizationStatusNotDetermined) {
             // The authorization callback issues requestLocation once granted.
             [g_mfLocationManager requestWhenInUseAuthorization];
