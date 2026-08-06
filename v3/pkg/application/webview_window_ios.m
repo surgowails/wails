@@ -405,18 +405,32 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 // GENERATED EVENTS START
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {
+    WailsVLog(@"[WailsViewController] didStartProvisionalNavigation url=%@", webView.URL.absoluteString ?: @"");
     if( hasListeners(EventWebViewDidStartNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidStartNavigation);
     }
 }
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    WailsVLog(@"[WailsViewController] didFinishNavigation url=%@", webView.URL.absoluteString ?: @"");
     if( hasListeners(EventWebViewDidFinishNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidFinishNavigation);
     }
 }
 
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation {
+    WailsVLog(@"[WailsViewController] didFailProvisionalNavigation url=%@ error=%@", webView.URL.absoluteString ?: @"", navigation);
+    if( hasListeners(EventWebViewDidFailNavigation) ) {
+        processWindowEvent(self.windowID, EventWebViewDidFailNavigation);
+    }
+}
+
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {
+    NSLog(@"[WailsViewController] didFailNavigation url=%@ error=%@", webView.URL.absoluteString ?: @"", error);
+}
+
+- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error {
+    NSLog(@"[WailsViewController] didFailProvisionalNavigation url=%@ error=%@", webView.URL.absoluteString ?: @"", error);
     if( hasListeners(EventWebViewDidFailNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidFailNavigation);
     }
@@ -455,9 +469,8 @@ void* ios_create_webview_with_id(unsigned int wailsID) {
         viewController = [[WailsViewController alloc] initWithWindowID:wailsID];
         if (!appDelegate.viewControllers) appDelegate.viewControllers = [NSMutableArray array];
         [appDelegate.viewControllers addObject:viewController];
-        if (appDelegate.viewControllers.count == 1) {
-            appDelegate.window.rootViewController = viewController;
-        }
+        appDelegate.window.rootViewController = viewController;
+        [appDelegate.window makeKeyAndVisible];
         // Trigger the view to load exactly once, the UIKit-correct way. Calling
         // -loadView and -viewDidLoad manually made UIKit ALSO load the view
         // automatically, creating two WebViews/viewDidLoad passes: content loaded
