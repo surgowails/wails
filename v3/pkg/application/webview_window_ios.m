@@ -36,6 +36,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     // Stream captured media (saved in NSTemporaryDirectory) straight from disk
     // with HTTP Range support, so <video> can stream/seek a clip of any length
     // without inlining it as a data URL.
+    NSLog(@"[WailsSchemeHandler] start task url=%@", urlSchemeTask.request.URL.absoluteString ?: @"");
     if ([urlSchemeTask.request.URL.path hasPrefix:@"/__capture__/"]) {
         [self serveCaptureTask:urlSchemeTask];
         return;
@@ -110,7 +111,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 - (void)webView:(WKWebView *)webView stopURLSchemeTask:(id<WKURLSchemeTask>)urlSchemeTask {
     cancelURLRequest((__bridge void*)urlSchemeTask);
-    WailsVLog(@"[WailsSchemeHandler] stop task");
+    NSLog(@"[WailsSchemeHandler] stop task url=%@", urlSchemeTask.request.URL.absoluteString ?: @"");
 }
 @end
 // MARK: - WailsMessageHandler
@@ -405,21 +406,25 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 // GENERATED EVENTS START
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {
-    WailsVLog(@"[WailsViewController] didStartProvisionalNavigation url=%@", webView.URL.absoluteString ?: @"");
+    NSLog(@"[WailsViewController] didStartProvisionalNavigation url=%@", webView.URL.absoluteString ?: @"");
     if( hasListeners(EventWebViewDidStartNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidStartNavigation);
     }
 }
 
+- (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation {
+    NSLog(@"[WailsViewController] didCommitNavigation url=%@", webView.URL.absoluteString ?: @"");
+}
+
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
-    WailsVLog(@"[WailsViewController] didFinishNavigation url=%@", webView.URL.absoluteString ?: @"");
+    NSLog(@"[WailsViewController] didFinishNavigation url=%@", webView.URL.absoluteString ?: @"");
     if( hasListeners(EventWebViewDidFinishNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidFinishNavigation);
     }
 }
 
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation {
-    WailsVLog(@"[WailsViewController] didFailProvisionalNavigation url=%@ error=%@", webView.URL.absoluteString ?: @"", navigation);
+    NSLog(@"[WailsViewController] didFailProvisionalNavigation url=%@ navigation=%@", webView.URL.absoluteString ?: @"", navigation);
     if( hasListeners(EventWebViewDidFailNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidFailNavigation);
     }
@@ -506,7 +511,11 @@ void ios_window_load_url(void* viewController, const char* url) {
     NSString *urlString = [NSString stringWithUTF8String:url];
     dispatch_async(dispatch_get_main_queue(), ^{
         NSURL *nsurl = [NSURL URLWithString:urlString];
-        if (!nsurl) return;
+        if (!nsurl) {
+            NSLog(@"[WailsViewController] loadRequest invalid url=%@", urlString);
+            return;
+        }
+        NSLog(@"[WailsViewController] loadRequest url=%@", urlString);
         [vc.webView loadRequest:[NSURLRequest requestWithURL:nsurl]];
     });
 }
@@ -515,6 +524,7 @@ void ios_window_set_html(void* viewController, const char* html) {
     WailsViewController *vc = (__bridge WailsViewController *)viewController;
     NSString *htmlString = [NSString stringWithUTF8String:html];
     dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"[WailsViewController] load fallback html");
         [vc.webView loadHTMLString:htmlString baseURL:[NSURL URLWithString:@"wails://localhost/"]];
     });
 }

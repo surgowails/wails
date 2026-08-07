@@ -28,6 +28,27 @@ type iosWebviewWindow struct {
 	parent       *WebviewWindow
 }
 
+const iosStartupFallbackHTML = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;min-height:100%;background:#f6f1e8;color:#1c1c1e;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{display:flex;align-items:center;justify-content:center;padding:32px;text-align:center}
+main{max-width:420px}
+h1{font-size:22px;line-height:1.2;margin:0 0 12px;font-weight:700}
+p{font-size:15px;line-height:1.45;margin:0;color:#55524d}
+</style>
+</head>
+<body>
+<main>
+<h1>MultiSafe is starting...</h1>
+<p>If this message stays visible, the iOS WebView opened but the embedded Wails app URL did not finish loading.</p>
+</main>
+</body>
+</html>`
+
 func (w *iosWebviewWindow) center() {}
 
 func (w *iosWebviewWindow) close() {}
@@ -224,6 +245,10 @@ func (w *iosWebviewWindow) run() {
 				w.nativeHandle,
 				C.uchar(rgba.Red), C.uchar(rgba.Green), C.uchar(rgba.Blue), C.uchar(rgba.Alpha),
 			)
+			// Paint a native fallback document before the Wails asset navigation.
+			// On TestFlight this distinguishes "WKWebView never rendered" from
+			// "wails://localhost/ failed or stalled before committing".
+			w.setHTML(iosStartupFallbackHTML)
 			// Load the start URL. This is the only initial navigation: the
 			// native layer no longer issues its own loadRequest, so the page
 			// loads exactly once.
