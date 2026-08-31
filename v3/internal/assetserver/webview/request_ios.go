@@ -24,14 +24,22 @@ static void URLSchemeTaskRelease(void *wkUrlSchemeTask) {
 static const char * URLSchemeTaskRequestURL(void *wkUrlSchemeTask) {
     id<WKURLSchemeTask> urlSchemeTask = (__bridge id<WKURLSchemeTask>) wkUrlSchemeTask;
     @autoreleasepool {
-        return [urlSchemeTask.request.URL.absoluteString UTF8String];
+        NSString *absoluteURL = urlSchemeTask.request.URL.absoluteString;
+        if (!absoluteURL) {
+            return nil;
+        }
+        return strdup([absoluteURL UTF8String]);
     }
 }
 
 static const char * URLSchemeTaskRequestMethod(void *wkUrlSchemeTask) {
     id<WKURLSchemeTask> urlSchemeTask = (__bridge id<WKURLSchemeTask>) wkUrlSchemeTask;
     @autoreleasepool {
-        return [urlSchemeTask.request.HTTPMethod UTF8String];
+        NSString *method = urlSchemeTask.request.HTTPMethod;
+        if (!method) {
+            return nil;
+        }
+        return strdup([method UTF8String]);
     }
 }
 
@@ -133,11 +141,21 @@ type request struct {
 }
 
 func (r *request) URL() (string, error) {
-	return C.GoString(C.URLSchemeTaskRequestURL(r.task)), nil
+	curl := C.URLSchemeTaskRequestURL(r.task)
+	if curl == nil {
+		return "", nil
+	}
+	defer C.free(unsafe.Pointer(curl))
+	return C.GoString(curl), nil
 }
 
 func (r *request) Method() (string, error) {
-	return C.GoString(C.URLSchemeTaskRequestMethod(r.task)), nil
+	cmethod := C.URLSchemeTaskRequestMethod(r.task)
+	if cmethod == nil {
+		return "", nil
+	}
+	defer C.free(unsafe.Pointer(cmethod))
+	return C.GoString(cmethod), nil
 }
 
 func (r *request) Header() (http.Header, error) {
