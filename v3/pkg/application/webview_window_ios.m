@@ -264,6 +264,15 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     UIEdgeInsets safe = UIEdgeInsetsZero;
     if (@available(iOS 11.0, *)) {
         safe = self.view.safeAreaInsets;
+        // In full-bleed mode the controller view may report zero before UIKit
+        // propagates its inset. The window always owns the physical display cutout.
+        if (appDelegate.window) {
+            UIEdgeInsets windowSafe = appDelegate.window.safeAreaInsets;
+            safe.top = MAX(safe.top, windowSafe.top);
+            safe.bottom = MAX(safe.bottom, windowSafe.bottom);
+            safe.left = MAX(safe.left, windowSafe.left);
+            safe.right = MAX(safe.right, windowSafe.right);
+        }
     }
     CGFloat width = self.view.bounds.size.width;
     CGFloat height = self.view.bounds.size.height;
