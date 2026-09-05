@@ -143,6 +143,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 @end
 // MARK: - WailsViewController
+@interface WailsViewController ()
+- (void)applySafeAreaCSSVariables;
+@end
+
 @implementation WailsViewController
 - (instancetype)initWithWindowID:(unsigned int)windowID {
     self = [super init];
@@ -278,6 +282,22 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     // keeps interactive UI clear of both the tab bar and system gesture area.
     CGFloat webBottom = 0;
     self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(webTop, 0, webBottom, 0));
+    [self applySafeAreaCSSVariables];
+}
+- (void)applySafeAreaCSSVariables {
+    if (!self.webView) return;
+
+    UIEdgeInsets safe = UIEdgeInsetsZero;
+    if (@available(iOS 11.0, *)) {
+        safe = self.view.safeAreaInsets;
+    }
+    NSString *js = [NSString stringWithFormat:
+        @"document.documentElement.style.setProperty('--wails-safe-area-top','%.0fpx');"
+         @"document.documentElement.style.setProperty('--wails-safe-area-bottom','%.0fpx');"
+         @"document.documentElement.style.setProperty('--wails-safe-area-left','%.0fpx');"
+         @"document.documentElement.style.setProperty('--wails-safe-area-right','%.0fpx');",
+        safe.top, safe.bottom, safe.left, safe.right];
+    [self.webView evaluateJavaScript:js completionHandler:nil];
 }
 // Orientation lock and status-bar appearance are driven by global state set
 // from Go (see mobile_features_ios.m). These overrides feed UIKit the current
@@ -295,6 +315,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 // beyond what CSS env(safe-area-inset-*) already provides.
 - (void)viewSafeAreaInsetsDidChange {
     [super viewSafeAreaInsetsDidChange];
+    [self applySafeAreaCSSVariables];
     if (@available(iOS 11.0, *)) {
         UIEdgeInsets s = self.view.safeAreaInsets;
         NSString *json = [NSString stringWithFormat:
@@ -424,6 +445,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
     NSLog(@"[WailsViewController] didFinishNavigation url=%@", webView.URL.absoluteString ?: @"");
+    [self applySafeAreaCSSVariables];
     if( hasListeners(EventWebViewDidFinishNavigation) ) {
         processWindowEvent(self.windowID, EventWebViewDidFinishNavigation);
     }
