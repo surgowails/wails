@@ -269,9 +269,15 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         tabH = size.height;
         self.tabBar.frame = CGRectMake(0, height - safe.bottom - tabH, width, tabH);
     }
-    CGFloat webTop = safe.top;
-    CGFloat webBottom = safe.bottom + tabH;
-    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(webTop, safe.left, webBottom, safe.right));
+    // Let the webview extend under the status bar/notch area so the frontend's
+    // background can control that region. The app shell is responsible for
+    // respecting env(safe-area-inset-top) for actual content layout.
+    CGFloat webTop = 0;
+    // Do the same at the home-indicator edge. Native tabs, when present, remain
+    // overlaid above the webview; the frontend receives the safe-area insets and
+    // keeps interactive UI clear of both the tab bar and system gesture area.
+    CGFloat webBottom = 0;
+    self.webView.frame = UIEdgeInsetsInsetRect(self.view.bounds, UIEdgeInsetsMake(webTop, 0, webBottom, 0));
 }
 // Orientation lock and status-bar appearance are driven by global state set
 // from Go (see mobile_features_ios.m). These overrides feed UIKit the current
