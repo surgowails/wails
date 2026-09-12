@@ -13,14 +13,120 @@ extern bool hasListeners(unsigned int);
 extern void cancelURLRequest(void *);
 // Buffer console messages until a WKWebView exists
 static NSMutableArray<NSString *> *pendingConsoleJS;
-// Subclass that optionally hides the input accessory toolbar based on global flag
-@interface WailsWebView : WKWebView @end
+@class WailsWebView;
+
+@interface WailsEditorAccessoryView : UIView
+- (instancetype)initWithWebView:(WailsWebView *)webView;
+@end
+
+// Subclass that optionally replaces the browser's generic input bar with the
+// editor-specific accessory supplied by the frontend.
+@interface WailsWebView : WKWebView
+@property (nonatomic, assign) BOOL editorAccessoryVisible;
+@property (nonatomic, strong) WailsEditorAccessoryView *editorAccessoryView;
+@end
 @implementation WailsWebView
 - (UIView *)inputAccessoryView {
+    if (self.editorAccessoryVisible) {
+        if (!self.editorAccessoryView) {
+            self.editorAccessoryView = [[WailsEditorAccessoryView alloc] initWithWebView:self];
+        }
+        return self.editorAccessoryView;
+    }
     if (ios_is_input_accessory_disabled()) {
         return nil;
     }
     return [super inputAccessoryView];
+}
+- (void)setEditorAccessoryVisible:(BOOL)visible {
+    if (_editorAccessoryVisible == visible) return;
+    _editorAccessoryVisible = visible;
+    dispatch_async(dispatch_get_main_queue(), ^{ [self reloadInputViews]; });
+}
+@end
+
+@interface WailsEditorAccessoryView ()
+@property (nonatomic, weak) WailsWebView *webView;
+@end
+
+@implementation WailsEditorAccessoryView
+- (instancetype)initWithWebView:(WailsWebView *)webView {
+    self = [super initWithFrame:CGRectMake(0, 0, 0, 50)];
+    if (self) {
+        _webView = webView;
+        self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        self.backgroundColor = [UIColor systemBackgroundColor];
+        UIView *separator = [[UIView alloc] initWithFrame:CGRectZero];
+        separator.backgroundColor = [UIColor separatorColor];
+        separator.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:separator];
+        [NSLayoutConstraint activateConstraints:@[
+            [separator.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [separator.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [separator.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [separator.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
+        ]];
+        UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectZero];
+        scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+        scrollView.showsHorizontalScrollIndicator = NO;
+        [self addSubview:scrollView];
+        [NSLayoutConstraint activateConstraints:@[
+            [scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
+            [scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
+            [scrollView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [scrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        ]];
+        UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
+        stack.translatesAutoresizingMaskIntoConstraints = NO;
+        stack.axis = UILayoutConstraintAxisHorizontal;
+        stack.alignment = UIStackViewAlignmentCenter;
+        stack.spacing = 4;
+        [scrollView addSubview:stack];
+        [NSLayoutConstraint activateConstraints:@[
+            [stack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
+            [stack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
+            [stack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
+            [stack.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
+            [stack.heightAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.heightAnchor],
+        ]];
+        NSArray<NSArray<NSString *> *> *items = @[
+            @[@"heading", @"Heading", @"textformat.size"], @[@"bold", @"Bold", @"bold"],
+            @[@"italic", @"Italic", @"italic"], @[@"bulleted-list", @"Bulleted list", @"list.bullet"],
+            @[@"numbered-list", @"Numbered list", @"list.number"], @[@"link", @"Link", @"link"],
+            @[@"wiki-link", @"Wiki link", @"doc.text"], @[@"image", @"Image", @"photo"],
+            @[@"code", @"Inline code", @"chevron.left.forwardslash.chevron.right"],
+            @[@"hide-keyboard", @"Hide keyboard", @"keyboard.chevron.compact.down"],
+        ];
+        for (NSArray<NSString *> *item in items) {
+            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+            button.accessibilityLabel = item[1];
+            button.accessibilityIdentifier = item[0];
+            [button setImage:[UIImage systemImageNamed:item[2]] forState:UIControlStateNormal];
+            [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
+            [button.widthAnchor constraintEqualToConstant:40].active = YES;
+            [button.heightAnchor constraintEqualToConstant:44].active = YES;
+            [stack addArrangedSubview:button];
+        }
+    }
+    return self;
+}
+- (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50); }
+- (void)runCommand:(UIButton *)button {
+    NSString *command = button.accessibilityIdentifier;
+    if (!command.length || !self.webView) return;
+    NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'%@'}}));", command];
+    [self.webView evaluateJavaScript:javascript completionHandler:nil];
+}
+@end
+
+@interface WailsEditorAccessoryHandler : NSObject <WKScriptMessageHandler>
+@property (nonatomic, weak) WailsWebView *webView;
+@end
+@implementation WailsEditorAccessoryHandler
+- (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
+    if (![message.body isKindOfClass:[NSDictionary class]]) return;
+    BOOL visible = [((NSDictionary *)message.body)[@"visible"] boolValue];
+    self.webView.editorAccessoryVisible = visible;
 }
 @end
 // MARK: - WailsSchemeHandler
@@ -203,6 +309,18 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     [config.userContentController addScriptMessageHandler:self.messageHandler name:@"external"];
     [config.userContentController addScriptMessageHandler:self.messageHandler name:@"wails"];
     self.webView = [[WailsWebView alloc] initWithFrame:self.view.bounds configuration:config];
+    self.editorAccessoryHandler = [[WailsEditorAccessoryHandler alloc] init];
+    self.editorAccessoryHandler.webView = self.webView;
+    [config.userContentController addScriptMessageHandler:self.editorAccessoryHandler name:@"editorAccessory"];
+    NSString *accessoryScript = @"(function(){"
+        "function update(){var active=document.activeElement;var visible=!!(active&&active.closest&&active.closest('.note-editor-shell'));"
+        "window.webkit.messageHandlers.editorAccessory.postMessage({visible:visible});}"
+        "document.addEventListener('focusin',update,true);"
+        "document.addEventListener('focusout',function(){setTimeout(update,0);},true);"
+        "})();";
+    WKUserScript *editorAccessoryScript = [[WKUserScript alloc] initWithSource:accessoryScript
+        injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+    [config.userContentController addUserScript:editorAccessoryScript];
     // Custom user agent if provided
     const char* userAgent = ios_get_user_agent();
     if (userAgent) {

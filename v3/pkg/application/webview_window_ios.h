@@ -24,11 +24,14 @@ extern unsigned int nextWindowID;
 - (instancetype)initWithWindowID:(unsigned int)windowID;
 @end
 
+@class WailsEditorAccessoryHandler;
+
 // Main view controller owning the WKWebView
 @interface WailsViewController : UIViewController <WKNavigationDelegate, UITabBarDelegate>
 @property (nonatomic, strong) WKWebView *webView;
 @property (nonatomic, strong) WailsSchemeHandler *schemeHandler;
 @property (nonatomic, strong) WailsMessageHandler *messageHandler;
+@property (nonatomic, strong) WailsEditorAccessoryHandler *editorAccessoryHandler;
 @property (nonatomic, assign) unsigned int windowID;
 - (void)enableNativeTabs:(BOOL)enabled;
 - (void)selectNativeTabIndex:(NSInteger)index;
