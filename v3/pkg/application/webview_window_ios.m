@@ -313,10 +313,11 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     self.editorAccessoryHandler.webView = self.webView;
     [config.userContentController addScriptMessageHandler:self.editorAccessoryHandler name:@"editorAccessory"];
     NSString *accessoryScript = @"(function(){"
-        "function update(){var active=document.activeElement;var visible=!!(active&&active.closest&&active.closest('.note-editor-shell'));"
-        "window.webkit.messageHandlers.editorAccessory.postMessage({visible:visible});}"
+        "function setVisible(visible){window.webkit.messageHandlers.editorAccessory.postMessage({visible:!!visible});}"
+        "function update(){var active=document.activeElement;setVisible(!!(active&&active.closest&&active.closest('.note-editor-shell')));}"
         "document.addEventListener('focusin',update,true);"
         "document.addEventListener('focusout',function(){setTimeout(update,0);},true);"
+        "document.addEventListener('multisafe:atomic-editor-focus',function(event){setVisible(event.detail&&event.detail.visible);});"
         "})();";
     WKUserScript *editorAccessoryScript = [[WKUserScript alloc] initWithSource:accessoryScript
         injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
