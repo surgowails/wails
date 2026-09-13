@@ -103,7 +103,13 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             button.accessibilityIdentifier = item[0];
             button.tintColor = [UIColor colorWithRed:199.0 / 255.0 green:199.0 / 255.0 blue:204.0 / 255.0 alpha:1.0];
             [button setImage:[UIImage systemImageNamed:item[2]] forState:UIControlStateNormal];
-            [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
+            UIMenu *menu = [self menuForCommand:item[0]];
+            if (menu) {
+                button.menu = menu;
+                button.showsMenuAsPrimaryAction = YES;
+            } else {
+                [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
+            }
             [button.widthAnchor constraintEqualToConstant:40].active = YES;
             [button.heightAnchor constraintEqualToConstant:44].active = YES;
             [stack addArrangedSubview:button];
@@ -112,8 +118,34 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     return self;
 }
 - (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50); }
+- (UIMenu *)menuForCommand:(NSString *)command {
+    if ([command isEqualToString:@"heading"]) {
+        NSMutableArray<UIAction *> *actions = [NSMutableArray array];
+        for (NSInteger level = 1; level <= 5; level++) {
+            NSString *title = [NSString stringWithFormat:@"Heading %ld", (long)level];
+            NSString *identifier = [NSString stringWithFormat:@"heading-%ld", (long)level];
+            [actions addObject:[self actionWithTitle:title command:identifier]];
+        }
+        return [UIMenu menuWithTitle:@"Heading" children:actions];
+    }
+    if ([command isEqualToString:@"code"]) {
+        return [UIMenu menuWithTitle:@"Code" children:@[
+            [self actionWithTitle:@"Inline" command:@"code-inline"],
+            [self actionWithTitle:@"Block" command:@"code-block"],
+        ]];
+    }
+    return nil;
+}
+- (UIAction *)actionWithTitle:(NSString *)title command:(NSString *)command {
+    __weak typeof(self) weakSelf = self;
+    return [UIAction actionWithTitle:title image:nil identifier:nil handler:^(__kindof UIAction *action) {
+        [weakSelf sendCommand:command];
+    }];
+}
 - (void)runCommand:(UIButton *)button {
-    NSString *command = button.accessibilityIdentifier;
+    [self sendCommand:button.accessibilityIdentifier];
+}
+- (void)sendCommand:(NSString *)command {
     if (!command.length || !self.webView) return;
     NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'%@'}}));", command];
     [self.webView evaluateJavaScript:javascript completionHandler:nil];
