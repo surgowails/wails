@@ -16,6 +16,7 @@ extern void registerListener(unsigned int event);
 
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
+#import <dispatch/dispatch.h>
 
 static AppDelegate *appDelegate = nil;
 
@@ -111,18 +112,39 @@ static char* getAccentColor(void) {
 }
 
 static void setApplicationShouldTerminateAfterLastWindowClosed(bool shouldTerminate) {
-	// Get the NSApp delegate
-	AppDelegate *appDelegate = (AppDelegate*)[NSApp delegate];
-	// Set the applicationShouldTerminateAfterLastWindowClosed boolean
-	appDelegate.shouldTerminateWhenLastWindowClosed = shouldTerminate;
+	void (^setShouldTerminate)(void) = ^{
+		// Get the NSApp delegate
+		AppDelegate *appDelegate = (AppDelegate*)[NSApp delegate];
+		// Set the applicationShouldTerminateAfterLastWindowClosed boolean
+		appDelegate.shouldTerminateWhenLastWindowClosed = shouldTerminate;
+	};
+	if ([NSThread isMainThread]) {
+		setShouldTerminate();
+	} else {
+		dispatch_async(dispatch_get_main_queue(), setShouldTerminate);
+	}
 }
 
 static void setActivationPolicy(int policy) {
-    [NSApp setActivationPolicy:policy];
+	void (^setPolicy)(void) = ^{
+		[NSApp setActivationPolicy:policy];
+	};
+	if ([NSThread isMainThread]) {
+		setPolicy();
+	} else {
+		dispatch_async(dispatch_get_main_queue(), setPolicy);
+	}
 }
 
 static void activateIgnoringOtherApps() {
-	[NSApp activateIgnoringOtherApps:YES];
+	void (^activateApp)(void) = ^{
+		[NSApp activateIgnoringOtherApps:YES];
+	};
+	if ([NSThread isMainThread]) {
+		activateApp();
+	} else {
+		dispatch_async(dispatch_get_main_queue(), activateApp);
+	}
 }
 
 static void run(void) {
