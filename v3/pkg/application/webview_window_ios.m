@@ -55,9 +55,9 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     if (self) {
         _webView = webView;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-        self.backgroundColor = [UIColor systemBackgroundColor];
+        self.backgroundColor = [UIColor colorWithRed:37.0 / 255.0 green:37.0 / 255.0 blue:41.0 / 255.0 alpha:1.0];
         UIView *separator = [[UIView alloc] initWithFrame:CGRectZero];
-        separator.backgroundColor = [UIColor separatorColor];
+        separator.backgroundColor = [UIColor colorWithRed:62.0 / 255.0 green:62.0 / 255.0 blue:66.0 / 255.0 alpha:1.0];
         separator.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:separator];
         [NSLayoutConstraint activateConstraints:@[
@@ -101,6 +101,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.accessibilityLabel = item[1];
             button.accessibilityIdentifier = item[0];
+            button.tintColor = [UIColor colorWithRed:199.0 / 255.0 green:199.0 / 255.0 blue:204.0 / 255.0 alpha:1.0];
             [button setImage:[UIImage systemImageNamed:item[2]] forState:UIControlStateNormal];
             [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
             [button.widthAnchor constraintEqualToConstant:40].active = YES;
