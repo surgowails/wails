@@ -95,7 +95,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         ]];
         NSArray<NSArray<NSString *> *> *items = @[
             @[@"heading", @"Heading", @"textformat.size"], @[@"bold", @"Bold", @"bold"],
-            @[@"italic", @"Italic", @"italic"], @[@"bulleted-list", @"Bulleted list", @"list.bullet"],
+            @[@"bulleted-list", @"Bulleted list", @"list.bullet"],
             @[@"numbered-list", @"Numbered list", @"list.number"], @[@"link", @"Link", @"link"],
             @[@"wiki-link", @"Wiki link", @"doc.text"], @[@"image", @"Image", @"photo"],
             @[@"code", @"Inline code", @"chevron.left.forwardslash.chevron.right"],
@@ -110,7 +110,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             UIMenu *menu = [self menuForCommand:item[0]];
             if (menu) {
                 button.menu = menu;
-                button.showsMenuAsPrimaryAction = YES;
+                button.showsMenuAsPrimaryAction = ![item[0] isEqualToString:@"bold"];
+                if ([item[0] isEqualToString:@"bold"]) {
+                    [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
+                }
             } else {
                 [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
             }
@@ -136,6 +139,11 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         return [UIMenu menuWithTitle:@"Code" children:@[
             [self actionWithTitle:@"Inline" command:@"code-inline"],
             [self actionWithTitle:@"Block" command:@"code-block"],
+        ]];
+    }
+    if ([command isEqualToString:@"bold"]) {
+        return [UIMenu menuWithTitle:@"Text style" children:@[
+            [self actionWithTitle:@"Italic" command:@"italic"],
         ]];
     }
     return nil;
