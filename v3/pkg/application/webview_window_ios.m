@@ -19,6 +19,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (instancetype)initWithWebView:(WailsWebView *)webView;
 @end
 
+@interface WailsLinkInsertViewController : UIViewController <UIPopoverPresentationControllerDelegate, UITextFieldDelegate>
+- (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView;
+@end
+
 // Subclass that optionally replaces the browser's generic input bar with the
 // editor-specific accessory supplied by the frontend.
 @interface WailsWebView : WKWebView
@@ -143,6 +147,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     }];
 }
 - (void)runCommand:(UIButton *)button {
+    if ([button.accessibilityIdentifier isEqualToString:@"link"]) {
+        [self presentLinkInsertFrom:button];
+        return;
+    }
     [self sendCommand:button.accessibilityIdentifier];
 }
 - (void)sendCommand:(NSString *)command {
@@ -150,6 +158,140 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'%@'}}));", command];
     [self.webView evaluateJavaScript:javascript completionHandler:nil];
 }
+- (UIViewController *)presenterForWebView {
+    for (WailsViewController *viewController in appDelegate.viewControllers) {
+        if (viewController.webView == self.webView) {
+            UIViewController *presenter = viewController;
+            while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed) {
+                presenter = presenter.presentedViewController;
+            }
+            return presenter;
+        }
+    }
+    return nil;
+}
+- (void)presentLinkInsertFrom:(UIButton *)button {
+    UIViewController *presenter = [self presenterForWebView];
+    if (!presenter || presenter.isBeingPresented || presenter.isBeingDismissed) return;
+    WailsLinkInsertViewController *controller = [[WailsLinkInsertViewController alloc]
+        initWithWebView:self.webView keyboardAccessoryView:self];
+    UIPopoverPresentationController *popover = controller.popoverPresentationController;
+    popover.sourceView = button;
+    popover.sourceRect = button.bounds;
+    popover.permittedArrowDirections = UIPopoverArrowDirectionDown | UIPopoverArrowDirectionUp;
+    popover.delegate = controller;
+    [presenter presentViewController:controller animated:YES completion:nil];
+}
+@end
+
+@interface WailsLinkInsertViewController ()
+@property (nonatomic, weak) WailsWebView *webView;
+@property (nonatomic, strong) UIView *keyboardAccessoryView;
+@property (nonatomic, strong) UITextField *urlField;
+@property (nonatomic, strong) UITextField *labelField;
+@property (nonatomic, strong) UIButton *insertButton;
+@end
+
+@implementation WailsLinkInsertViewController
+- (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _webView = webView;
+        _keyboardAccessoryView = keyboardAccessoryView;
+        self.modalPresentationStyle = UIModalPresentationPopover;
+        self.preferredContentSize = CGSizeMake(320, 148);
+    }
+    return self;
+}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.view.layer.cornerRadius = 14;
+    self.view.layer.cornerCurve = kCACornerCurveContinuous;
+    self.view.layer.masksToBounds = YES;
+
+    UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 8;
+    [self.view addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:12],
+        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [stack.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-12],
+    ]];
+
+    self.urlField = [self textFieldWithPlaceholder:@"URL" keyboardType:UIKeyboardTypeURL returnKey:UIReturnKeyNext];
+    self.urlField.textContentType = UITextContentTypeURL;
+    self.urlField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.urlField.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.labelField = [self textFieldWithPlaceholder:@"Description (optional)" keyboardType:UIKeyboardTypeDefault returnKey:UIReturnKeyDone];
+    [stack addArrangedSubview:self.urlField];
+    [stack addArrangedSubview:self.labelField];
+
+    UIStackView *buttons = [[UIStackView alloc] initWithFrame:CGRectZero];
+    buttons.axis = UILayoutConstraintAxisHorizontal;
+    buttons.alignment = UIStackViewAlignmentCenter;
+    [stack addArrangedSubview:buttons];
+    UIView *spacer = [[UIView alloc] initWithFrame:CGRectZero];
+    [buttons addArrangedSubview:spacer];
+    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
+    [cancel setTitle:@"Cancel" forState:UIControlStateNormal];
+    [cancel addTarget:self action:@selector(cancelTapped) forControlEvents:UIControlEventTouchUpInside];
+    [buttons addArrangedSubview:cancel];
+    self.insertButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.insertButton setTitle:@"Insert" forState:UIControlStateNormal];
+    self.insertButton.configuration = [UIButtonConfiguration filledButtonConfiguration];
+    [self.insertButton addTarget:self action:@selector(insertTapped) forControlEvents:UIControlEventTouchUpInside];
+    [buttons addArrangedSubview:self.insertButton];
+    [self updateInsertEnabled];
+}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self.urlField becomeFirstResponder];
+}
+- (UITextField *)textFieldWithPlaceholder:(NSString *)placeholder keyboardType:(UIKeyboardType)keyboardType returnKey:(UIReturnKeyType)returnKey {
+    UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.placeholder = placeholder;
+    field.keyboardType = keyboardType;
+    field.returnKeyType = returnKey;
+    field.delegate = self;
+    field.inputAccessoryView = self.keyboardAccessoryView;
+    [field addTarget:self action:@selector(editingChanged) forControlEvents:UIControlEventEditingChanged];
+    [field.heightAnchor constraintEqualToConstant:40].active = YES;
+    return field;
+}
+- (void)editingChanged { [self updateInsertEnabled]; }
+- (void)updateInsertEnabled {
+    NSString *url = [self.urlField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    self.insertButton.enabled = url.length > 0;
+}
+- (void)cancelTapped { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)insertTapped {
+    NSString *url = [self.urlField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!url.length) return;
+    NSString *label = [self.labelField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSError *error = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:@{ @"url": url, @"label": label } options:0 error:&error];
+    if (error || !data) return;
+    NSString *payload = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'link-insert',payload:%@}}));", payload];
+    [self dismissViewControllerAnimated:YES completion:^{ [self.webView evaluateJavaScript:javascript completionHandler:nil]; }];
+}
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    if (textField == self.urlField) {
+        [self.labelField becomeFirstResponder];
+        return NO;
+    }
+    if (textField == self.labelField && self.insertButton.enabled) {
+        [self insertTapped];
+        return NO;
+    }
+    return YES;
+}
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller { return UIModalPresentationNone; }
 @end
 
 @interface WailsEditorAccessoryHandler : NSObject <WKScriptMessageHandler>
