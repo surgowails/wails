@@ -497,7 +497,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     [config.userContentController addScriptMessageHandler:self.editorAccessoryHandler name:@"editorAccessory"];
     NSString *accessoryScript = @"(function(){"
         "function setVisible(visible){window.webkit.messageHandlers.editorAccessory.postMessage({visible:!!visible});}"
-        "function update(){var active=document.activeElement;setVisible(!!(active&&active.closest&&active.closest('.note-editor-shell')));}"
+        "function update(){var active=document.activeElement;setVisible(!!(active&&active.closest&&!active.closest('[data-quick-entry]')&&active.closest('.note-editor-shell')));}"
         "document.addEventListener('focusin',update,true);"
         "document.addEventListener('focusout',function(){setTimeout(update,0);},true);"
         "document.addEventListener('multisafe:atomic-editor-focus',function(event){setVisible(event.detail&&event.detail.visible);});"
