@@ -97,6 +97,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         NSArray<NSArray<NSString *> *> *parents = @[
             @[@"format", @"Formatting", @"textformat"],
             @[@"insert", @"Insert", @"plus"],
+            @[@"undo", @"Undo", @"arrow.counterclockwise"],
         ];
         for (NSArray<NSString *> *parent in parents) {
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -104,7 +105,8 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             button.accessibilityIdentifier = parent[0];
             button.tintColor = [UIColor colorWithRed:199.0 / 255.0 green:199.0 / 255.0 blue:204.0 / 255.0 alpha:1.0];
             [button setImage:[UIImage systemImageNamed:parent[2]] forState:UIControlStateNormal];
-            [button addTarget:self action:@selector(showCommandPalette:) forControlEvents:UIControlEventTouchUpInside];
+            SEL action = [parent[0] isEqualToString:@"undo"] ? @selector(commandTapped:) : @selector(showCommandPalette:);
+            [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
             [button.widthAnchor constraintEqualToConstant:44].active = YES;
             [button.heightAnchor constraintEqualToConstant:44].active = YES;
             [stack addArrangedSubview:button];
@@ -215,7 +217,9 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 - (void)commandTapped:(UIButton *)button {
     NSString *command = button.accessibilityIdentifier;
-    [self hideEmbeddedCommandPalette];
+    if (self.commandPalette) {
+        [self hideEmbeddedCommandPalette];
+    }
     if ([command isEqualToString:@"link"]) {
         [self presentLinkInsert];
         return;
