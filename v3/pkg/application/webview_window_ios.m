@@ -19,12 +19,6 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (instancetype)initWithWebView:(WailsWebView *)webView;
 @end
 
-@interface WailsEditorCommandPaletteViewController : UIViewController <UIPopoverPresentationControllerDelegate>
-- (instancetype)initWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
-                     columns:(NSInteger)columns
-              commandHandler:(void (^)(NSString *command))commandHandler;
-@end
-
 @interface WailsLinkInsertViewController : UIViewController <UIPopoverPresentationControllerDelegate, UITextFieldDelegate>
 - (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView;
 @end
@@ -57,6 +51,9 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 
 @interface WailsEditorAccessoryView ()
 @property (nonatomic, weak) WailsWebView *webView;
+@property (nonatomic, strong) UIView *toolbar;
+@property (nonatomic, strong) UIView *commandPalette;
+@property (nonatomic, assign) CGFloat commandPaletteHeight;
 @end
 
 @implementation WailsEditorAccessoryView
@@ -66,14 +63,24 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         _webView = webView;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         self.backgroundColor = [UIColor colorWithRed:37.0 / 255.0 green:37.0 / 255.0 blue:41.0 / 255.0 alpha:1.0];
+        self.toolbar = [[UIView alloc] initWithFrame:CGRectZero];
+        self.toolbar.translatesAutoresizingMaskIntoConstraints = NO;
+        self.toolbar.backgroundColor = self.backgroundColor;
+        [self addSubview:self.toolbar];
+        [NSLayoutConstraint activateConstraints:@[
+            [self.toolbar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [self.toolbar.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [self.toolbar.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [self.toolbar.heightAnchor constraintEqualToConstant:50],
+        ]];
         UIView *separator = [[UIView alloc] initWithFrame:CGRectZero];
         separator.backgroundColor = [UIColor colorWithRed:62.0 / 255.0 green:62.0 / 255.0 blue:66.0 / 255.0 alpha:1.0];
         separator.translatesAutoresizingMaskIntoConstraints = NO;
-        [self addSubview:separator];
+        [self.toolbar addSubview:separator];
         [NSLayoutConstraint activateConstraints:@[
-            [separator.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [separator.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-            [separator.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [separator.leadingAnchor constraintEqualToAnchor:self.toolbar.leadingAnchor],
+            [separator.trailingAnchor constraintEqualToAnchor:self.toolbar.trailingAnchor],
+            [separator.topAnchor constraintEqualToAnchor:self.toolbar.topAnchor],
             [separator.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
         ]];
         UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
@@ -81,11 +88,11 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         stack.axis = UILayoutConstraintAxisHorizontal;
         stack.alignment = UIStackViewAlignmentCenter;
         stack.spacing = 8;
-        [self addSubview:stack];
+        [self.toolbar addSubview:stack];
         [NSLayoutConstraint activateConstraints:@[
-            [stack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
-            [stack.topAnchor constraintEqualToAnchor:self.topAnchor],
-            [stack.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [stack.leadingAnchor constraintEqualToAnchor:self.toolbar.leadingAnchor constant:12],
+            [stack.topAnchor constraintEqualToAnchor:self.toolbar.topAnchor],
+            [stack.bottomAnchor constraintEqualToAnchor:self.toolbar.bottomAnchor],
         ]];
         NSArray<NSArray<NSString *> *> *parents = @[
             @[@"format", @"Formatting", @"textformat"],
@@ -105,7 +112,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     }
     return self;
 }
-- (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50); }
+- (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight); }
 - (void)showCommandPalette:(UIButton *)button {
     NSArray<NSDictionary<NSString *, NSString *> *> *items;
     NSInteger columns;
@@ -135,21 +142,85 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         ];
     }
 
-    __weak typeof(self) weakSelf = self;
-    WailsEditorCommandPaletteViewController *controller = [[WailsEditorCommandPaletteViewController alloc]
-        initWithItems:items columns:columns commandHandler:^(NSString *command) {
-            if ([command isEqualToString:@"link"]) {
-                [weakSelf presentLinkInsertFrom:button];
-                return;
+    [self showEmbeddedCommandPaletteWithItems:items columns:columns];
+}
+- (void)showEmbeddedCommandPaletteWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items columns:(NSInteger)columns {
+    [self.commandPalette removeFromSuperview];
+    NSInteger rowCount = (items.count + columns - 1) / columns;
+    self.commandPaletteHeight = rowCount * 52.0 + 16.0;
+
+    UIView *palette = [[UIView alloc] initWithFrame:CGRectZero];
+    palette.translatesAutoresizingMaskIntoConstraints = NO;
+    palette.backgroundColor = [UIColor colorWithRed:45.0 / 255.0 green:45.0 / 255.0 blue:49.0 / 255.0 alpha:1.0];
+    palette.layer.cornerRadius = 10;
+    palette.layer.cornerCurve = kCACornerCurveContinuous;
+    palette.layer.masksToBounds = YES;
+    [self addSubview:palette];
+    self.commandPalette = palette;
+    [NSLayoutConstraint activateConstraints:@[
+        [palette.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
+        [palette.widthAnchor constraintEqualToConstant:columns * 62.0 + 16.0],
+        [palette.bottomAnchor constraintEqualToAnchor:self.toolbar.topAnchor],
+        [palette.heightAnchor constraintEqualToConstant:self.commandPaletteHeight],
+    ]];
+
+    UIStackView *grid = [[UIStackView alloc] initWithFrame:CGRectZero];
+    grid.translatesAutoresizingMaskIntoConstraints = NO;
+    grid.axis = UILayoutConstraintAxisVertical;
+    grid.spacing = 6;
+    grid.distribution = UIStackViewDistributionFillEqually;
+    [palette addSubview:grid];
+    [NSLayoutConstraint activateConstraints:@[
+        [grid.topAnchor constraintEqualToAnchor:palette.topAnchor constant:8],
+        [grid.leadingAnchor constraintEqualToAnchor:palette.leadingAnchor constant:8],
+        [grid.trailingAnchor constraintEqualToAnchor:palette.trailingAnchor constant:-8],
+        [grid.bottomAnchor constraintEqualToAnchor:palette.bottomAnchor constant:-8],
+    ]];
+    for (NSInteger rowStart = 0; rowStart < items.count; rowStart += columns) {
+        UIStackView *row = [[UIStackView alloc] initWithFrame:CGRectZero];
+        row.axis = UILayoutConstraintAxisHorizontal;
+        row.spacing = 6;
+        row.distribution = UIStackViewDistributionFillEqually;
+        [grid addArrangedSubview:row];
+        for (NSInteger column = 0; column < columns; column++) {
+            NSInteger itemIndex = rowStart + column;
+            if (itemIndex >= items.count) {
+                [row addArrangedSubview:[[UIView alloc] initWithFrame:CGRectZero]];
+                continue;
             }
-            [weakSelf sendCommand:command];
-        }];
-    UIPopoverPresentationController *popover = controller.popoverPresentationController;
-    popover.sourceView = button;
-    popover.sourceRect = button.bounds;
-    popover.permittedArrowDirections = UIPopoverArrowDirectionDown | UIPopoverArrowDirectionUp;
-    popover.delegate = controller;
-    [[self presenterForWebView] presentViewController:controller animated:YES completion:nil];
+            NSDictionary<NSString *, NSString *> *item = items[itemIndex];
+            UIButton *commandButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            commandButton.accessibilityLabel = item[@"title"];
+            commandButton.accessibilityIdentifier = item[@"command"];
+            commandButton.tintColor = [UIColor colorWithRed:220.0 / 255.0 green:220.0 / 255.0 blue:224.0 / 255.0 alpha:1.0];
+            commandButton.titleLabel.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightMedium];
+            if (item[@"symbol"].length) {
+                [commandButton setImage:[UIImage systemImageNamed:item[@"symbol"]] forState:UIControlStateNormal];
+            } else {
+                [commandButton setTitle:item[@"label"] forState:UIControlStateNormal];
+            }
+            [commandButton addTarget:self action:@selector(commandTapped:) forControlEvents:UIControlEventTouchUpInside];
+            [row addArrangedSubview:commandButton];
+        }
+    }
+    [self invalidateIntrinsicContentSize];
+    [self.webView reloadInputViews];
+}
+- (void)hideEmbeddedCommandPalette {
+    [self.commandPalette removeFromSuperview];
+    self.commandPalette = nil;
+    self.commandPaletteHeight = 0;
+    [self invalidateIntrinsicContentSize];
+    [self.webView reloadInputViews];
+}
+- (void)commandTapped:(UIButton *)button {
+    NSString *command = button.accessibilityIdentifier;
+    [self hideEmbeddedCommandPalette];
+    if ([command isEqualToString:@"link"]) {
+        [self presentLinkInsert];
+        return;
+    }
+    [self sendCommand:command];
 }
 - (void)sendCommand:(NSString *)command {
     if (!command.length || !self.webView) return;
@@ -168,100 +239,18 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     }
     return nil;
 }
-- (void)presentLinkInsertFrom:(UIButton *)button {
+- (void)presentLinkInsert {
     UIViewController *presenter = [self presenterForWebView];
     if (!presenter || presenter.isBeingPresented || presenter.isBeingDismissed) return;
     WailsLinkInsertViewController *controller = [[WailsLinkInsertViewController alloc]
         initWithWebView:self.webView keyboardAccessoryView:self];
     UIPopoverPresentationController *popover = controller.popoverPresentationController;
-    popover.sourceView = button;
-    popover.sourceRect = button.bounds;
+    popover.sourceView = self.toolbar;
+    popover.sourceRect = CGRectMake(52, 0, 44, 50);
     popover.permittedArrowDirections = UIPopoverArrowDirectionDown | UIPopoverArrowDirectionUp;
     popover.delegate = controller;
     [presenter presentViewController:controller animated:YES completion:nil];
 }
-@end
-
-@interface WailsEditorCommandPaletteViewController ()
-@property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *items;
-@property (nonatomic, assign) NSInteger columns;
-@property (nonatomic, copy) void (^commandHandler)(NSString *command);
-@end
-
-@implementation WailsEditorCommandPaletteViewController
-- (instancetype)initWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
-                     columns:(NSInteger)columns
-              commandHandler:(void (^)(NSString *command))commandHandler {
-    self = [super initWithNibName:nil bundle:nil];
-    if (self) {
-        _items = [items copy];
-        _columns = MAX(1, columns);
-        _commandHandler = [commandHandler copy];
-        self.modalPresentationStyle = UIModalPresentationPopover;
-        NSInteger rows = (_items.count + _columns - 1) / _columns;
-        self.preferredContentSize = CGSizeMake(_columns * 62.0 + 16.0, rows * 58.0 + 16.0);
-    }
-    return self;
-}
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:45.0 / 255.0 green:45.0 / 255.0 blue:49.0 / 255.0 alpha:1.0];
-    self.view.layer.cornerRadius = 14;
-    self.view.layer.cornerCurve = kCACornerCurveContinuous;
-    self.view.layer.masksToBounds = YES;
-
-    UIStackView *grid = [[UIStackView alloc] initWithFrame:CGRectZero];
-    grid.translatesAutoresizingMaskIntoConstraints = NO;
-    grid.axis = UILayoutConstraintAxisVertical;
-    grid.spacing = 6;
-    grid.distribution = UIStackViewDistributionFillEqually;
-    [self.view addSubview:grid];
-    [NSLayoutConstraint activateConstraints:@[
-        [grid.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:8],
-        [grid.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
-        [grid.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
-        [grid.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-8],
-    ]];
-
-    for (NSInteger rowStart = 0; rowStart < self.items.count; rowStart += self.columns) {
-        UIStackView *row = [[UIStackView alloc] initWithFrame:CGRectZero];
-        row.axis = UILayoutConstraintAxisHorizontal;
-        row.spacing = 6;
-        row.distribution = UIStackViewDistributionFillEqually;
-        [grid addArrangedSubview:row];
-
-        for (NSInteger column = 0; column < self.columns; column++) {
-            NSInteger itemIndex = rowStart + column;
-            if (itemIndex >= self.items.count) {
-                UIView *spacer = [[UIView alloc] initWithFrame:CGRectZero];
-                [row addArrangedSubview:spacer];
-                continue;
-            }
-
-            NSDictionary<NSString *, NSString *> *item = self.items[itemIndex];
-            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-            button.accessibilityLabel = item[@"title"];
-            button.accessibilityIdentifier = item[@"command"];
-            button.tintColor = [UIColor colorWithRed:220.0 / 255.0 green:220.0 / 255.0 blue:224.0 / 255.0 alpha:1.0];
-            button.titleLabel.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightMedium];
-            if (item[@"symbol"].length) {
-                [button setImage:[UIImage systemImageNamed:item[@"symbol"]] forState:UIControlStateNormal];
-            } else {
-                [button setTitle:item[@"label"] forState:UIControlStateNormal];
-            }
-            [button addTarget:self action:@selector(commandTapped:) forControlEvents:UIControlEventTouchUpInside];
-            [row addArrangedSubview:button];
-        }
-    }
-}
-- (void)commandTapped:(UIButton *)button {
-    NSString *command = button.accessibilityIdentifier;
-    void (^handler)(NSString *) = self.commandHandler;
-    [self dismissViewControllerAnimated:YES completion:^{
-        handler(command);
-    }];
-}
-- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller { return UIModalPresentationNone; }
 @end
 
 @interface WailsLinkInsertViewController ()
