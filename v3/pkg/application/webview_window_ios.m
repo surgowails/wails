@@ -19,6 +19,12 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (instancetype)initWithWebView:(WailsWebView *)webView;
 @end
 
+@interface WailsEditorCommandPaletteViewController : UIViewController <UIPopoverPresentationControllerDelegate>
+- (instancetype)initWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
+                     columns:(NSInteger)columns
+              commandHandler:(void (^)(NSString *command))commandHandler;
+@end
+
 @interface WailsLinkInsertViewController : UIViewController <UIPopoverPresentationControllerDelegate, UITextFieldDelegate>
 - (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView;
 @end
@@ -70,54 +76,29 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             [separator.topAnchor constraintEqualToAnchor:self.topAnchor],
             [separator.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
         ]];
-        UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectZero];
-        scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-        scrollView.showsHorizontalScrollIndicator = NO;
-        [self addSubview:scrollView];
-        [NSLayoutConstraint activateConstraints:@[
-            [scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
-            [scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
-            [scrollView.topAnchor constraintEqualToAnchor:self.topAnchor],
-            [scrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-        ]];
         UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
         stack.translatesAutoresizingMaskIntoConstraints = NO;
         stack.axis = UILayoutConstraintAxisHorizontal;
         stack.alignment = UIStackViewAlignmentCenter;
-        stack.spacing = 4;
-        [scrollView addSubview:stack];
+        stack.spacing = 8;
+        [self addSubview:stack];
         [NSLayoutConstraint activateConstraints:@[
-            [stack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
-            [stack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
-            [stack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
-            [stack.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
-            [stack.heightAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.heightAnchor],
+            [stack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
+            [stack.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [stack.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
         ]];
-        NSArray<NSArray<NSString *> *> *items = @[
-            @[@"heading", @"Heading", @"textformat.size"], @[@"bold", @"Bold", @"bold"],
-            @[@"bulleted-list", @"Bulleted list", @"list.bullet"],
-            @[@"numbered-list", @"Numbered list", @"list.number"], @[@"link", @"Link", @"link"],
-            @[@"wiki-link", @"Wiki link", @"doc.text"], @[@"image", @"Image", @"photo"],
-            @[@"code", @"Inline code", @"chevron.left.forwardslash.chevron.right"],
-            @[@"hide-keyboard", @"Hide keyboard", @"keyboard.chevron.compact.down"],
+        NSArray<NSArray<NSString *> *> *parents = @[
+            @[@"format", @"Formatting", @"textformat"],
+            @[@"insert", @"Insert", @"plus"],
         ];
-        for (NSArray<NSString *> *item in items) {
+        for (NSArray<NSString *> *parent in parents) {
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-            button.accessibilityLabel = item[1];
-            button.accessibilityIdentifier = item[0];
+            button.accessibilityLabel = parent[1];
+            button.accessibilityIdentifier = parent[0];
             button.tintColor = [UIColor colorWithRed:199.0 / 255.0 green:199.0 / 255.0 blue:204.0 / 255.0 alpha:1.0];
-            [button setImage:[UIImage systemImageNamed:item[2]] forState:UIControlStateNormal];
-            UIMenu *menu = [self menuForCommand:item[0]];
-            if (menu) {
-                button.menu = menu;
-                button.showsMenuAsPrimaryAction = ![item[0] isEqualToString:@"bold"];
-                if ([item[0] isEqualToString:@"bold"]) {
-                    [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
-                }
-            } else {
-                [button addTarget:self action:@selector(runCommand:) forControlEvents:UIControlEventTouchUpInside];
-            }
-            [button.widthAnchor constraintEqualToConstant:40].active = YES;
+            [button setImage:[UIImage systemImageNamed:parent[2]] forState:UIControlStateNormal];
+            [button addTarget:self action:@selector(showCommandPalette:) forControlEvents:UIControlEventTouchUpInside];
+            [button.widthAnchor constraintEqualToConstant:44].active = YES;
             [button.heightAnchor constraintEqualToConstant:44].active = YES;
             [stack addArrangedSubview:button];
         }
@@ -125,41 +106,49 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     return self;
 }
 - (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50); }
-- (UIMenu *)menuForCommand:(NSString *)command {
-    if ([command isEqualToString:@"heading"]) {
-        NSMutableArray<UIAction *> *actions = [NSMutableArray array];
-        for (NSInteger level = 1; level <= 5; level++) {
-            NSString *title = [NSString stringWithFormat:@"Heading %ld", (long)level];
-            NSString *identifier = [NSString stringWithFormat:@"heading-%ld", (long)level];
-            [actions addObject:[self actionWithTitle:title command:identifier]];
-        }
-        return [UIMenu menuWithTitle:@"Heading" children:actions];
+- (void)showCommandPalette:(UIButton *)button {
+    NSArray<NSDictionary<NSString *, NSString *> *> *items;
+    NSInteger columns;
+    if ([button.accessibilityIdentifier isEqualToString:@"format"]) {
+        columns = 4;
+        items = @[
+            @{ @"command": @"heading-1", @"title": @"Heading 1", @"label": @"H1" },
+            @{ @"command": @"heading-2", @"title": @"Heading 2", @"label": @"H2" },
+            @{ @"command": @"heading-3", @"title": @"Heading 3", @"label": @"H3" },
+            @{ @"command": @"heading-4", @"title": @"Heading 4", @"label": @"H4" },
+            @{ @"command": @"bold", @"title": @"Bold", @"symbol": @"bold" },
+            @{ @"command": @"italic", @"title": @"Italic", @"symbol": @"italic" },
+            @{ @"command": @"strikethrough", @"title": @"Strikethrough", @"symbol": @"strikethrough" },
+            @{ @"command": @"highlight", @"title": @"Highlight", @"symbol": @"highlighter" },
+            @{ @"command": @"bulleted-list", @"title": @"Bulleted list", @"symbol": @"list.bullet" },
+            @{ @"command": @"numbered-list", @"title": @"Numbered list", @"symbol": @"list.number" },
+            @{ @"command": @"code-inline", @"title": @"Inline code", @"symbol": @"chevron.left.forwardslash.chevron.right" },
+            @{ @"command": @"code-block", @"title": @"Code block", @"symbol": @"curlybraces" },
+        ];
+    } else {
+        columns = 3;
+        items = @[
+            @{ @"command": @"image", @"title": @"Add image", @"symbol": @"photo.badge.plus" },
+            @{ @"command": @"link", @"title": @"Add link", @"symbol": @"link.badge.plus" },
+            @{ @"command": @"table", @"title": @"Add table", @"symbol": @"tablecells" },
+        ];
     }
-    if ([command isEqualToString:@"code"]) {
-        return [UIMenu menuWithTitle:@"Code" children:@[
-            [self actionWithTitle:@"Inline" command:@"code-inline"],
-            [self actionWithTitle:@"Block" command:@"code-block"],
-        ]];
-    }
-    if ([command isEqualToString:@"bold"]) {
-        return [UIMenu menuWithTitle:@"Text style" children:@[
-            [self actionWithTitle:@"Italic" command:@"italic"],
-        ]];
-    }
-    return nil;
-}
-- (UIAction *)actionWithTitle:(NSString *)title command:(NSString *)command {
+
     __weak typeof(self) weakSelf = self;
-    return [UIAction actionWithTitle:title image:nil identifier:nil handler:^(__kindof UIAction *action) {
-        [weakSelf sendCommand:command];
-    }];
-}
-- (void)runCommand:(UIButton *)button {
-    if ([button.accessibilityIdentifier isEqualToString:@"link"]) {
-        [self presentLinkInsertFrom:button];
-        return;
-    }
-    [self sendCommand:button.accessibilityIdentifier];
+    WailsEditorCommandPaletteViewController *controller = [[WailsEditorCommandPaletteViewController alloc]
+        initWithItems:items columns:columns commandHandler:^(NSString *command) {
+            if ([command isEqualToString:@"link"]) {
+                [weakSelf presentLinkInsertFrom:button];
+                return;
+            }
+            [weakSelf sendCommand:command];
+        }];
+    UIPopoverPresentationController *popover = controller.popoverPresentationController;
+    popover.sourceView = button;
+    popover.sourceRect = button.bounds;
+    popover.permittedArrowDirections = UIPopoverArrowDirectionDown | UIPopoverArrowDirectionUp;
+    popover.delegate = controller;
+    [[self presenterForWebView] presentViewController:controller animated:YES completion:nil];
 }
 - (void)sendCommand:(NSString *)command {
     if (!command.length || !self.webView) return;
@@ -190,6 +179,88 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     popover.delegate = controller;
     [presenter presentViewController:controller animated:YES completion:nil];
 }
+@end
+
+@interface WailsEditorCommandPaletteViewController ()
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *items;
+@property (nonatomic, assign) NSInteger columns;
+@property (nonatomic, copy) void (^commandHandler)(NSString *command);
+@end
+
+@implementation WailsEditorCommandPaletteViewController
+- (instancetype)initWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
+                     columns:(NSInteger)columns
+              commandHandler:(void (^)(NSString *command))commandHandler {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _items = [items copy];
+        _columns = MAX(1, columns);
+        _commandHandler = [commandHandler copy];
+        self.modalPresentationStyle = UIModalPresentationPopover;
+        NSInteger rows = (_items.count + _columns - 1) / _columns;
+        self.preferredContentSize = CGSizeMake(_columns * 62.0 + 16.0, rows * 58.0 + 16.0);
+    }
+    return self;
+}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithRed:45.0 / 255.0 green:45.0 / 255.0 blue:49.0 / 255.0 alpha:1.0];
+    self.view.layer.cornerRadius = 14;
+    self.view.layer.cornerCurve = kCACornerCurveContinuous;
+    self.view.layer.masksToBounds = YES;
+
+    UIStackView *grid = [[UIStackView alloc] initWithFrame:CGRectZero];
+    grid.translatesAutoresizingMaskIntoConstraints = NO;
+    grid.axis = UILayoutConstraintAxisVertical;
+    grid.spacing = 6;
+    grid.distribution = UIStackViewDistributionFillEqually;
+    [self.view addSubview:grid];
+    [NSLayoutConstraint activateConstraints:@[
+        [grid.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:8],
+        [grid.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
+        [grid.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
+        [grid.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-8],
+    ]];
+
+    for (NSInteger rowStart = 0; rowStart < self.items.count; rowStart += self.columns) {
+        UIStackView *row = [[UIStackView alloc] initWithFrame:CGRectZero];
+        row.axis = UILayoutConstraintAxisHorizontal;
+        row.spacing = 6;
+        row.distribution = UIStackViewDistributionFillEqually;
+        [grid addArrangedSubview:row];
+
+        for (NSInteger column = 0; column < self.columns; column++) {
+            NSInteger itemIndex = rowStart + column;
+            if (itemIndex >= self.items.count) {
+                UIView *spacer = [[UIView alloc] initWithFrame:CGRectZero];
+                [row addArrangedSubview:spacer];
+                continue;
+            }
+
+            NSDictionary<NSString *, NSString *> *item = self.items[itemIndex];
+            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+            button.accessibilityLabel = item[@"title"];
+            button.accessibilityIdentifier = item[@"command"];
+            button.tintColor = [UIColor colorWithRed:220.0 / 255.0 green:220.0 / 255.0 blue:224.0 / 255.0 alpha:1.0];
+            button.titleLabel.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightMedium];
+            if (item[@"symbol"].length) {
+                [button setImage:[UIImage systemImageNamed:item[@"symbol"]] forState:UIControlStateNormal];
+            } else {
+                [button setTitle:item[@"label"] forState:UIControlStateNormal];
+            }
+            [button addTarget:self action:@selector(commandTapped:) forControlEvents:UIControlEventTouchUpInside];
+            [row addArrangedSubview:button];
+        }
+    }
+}
+- (void)commandTapped:(UIButton *)button {
+    NSString *command = button.accessibilityIdentifier;
+    void (^handler)(NSString *) = self.commandHandler;
+    [self dismissViewControllerAnimated:YES completion:^{
+        handler(command);
+    }];
+}
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller { return UIModalPresentationNone; }
 @end
 
 @interface WailsLinkInsertViewController ()
