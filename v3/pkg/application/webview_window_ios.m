@@ -126,11 +126,12 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             @{ @"command": @"code-block", @"title": @"Code block", @"symbol": @"curlybraces" },
         ];
     } else {
-        columns = 3;
+        columns = 4;
         items = @[
             @{ @"command": @"image", @"title": @"Add image", @"symbol": @"photo.badge.plus" },
             @{ @"command": @"link", @"title": @"Add link", @"symbol": @"link.badge.plus" },
             @{ @"command": @"table", @"title": @"Add table", @"symbol": @"tablecells" },
+            @{ @"command": @"wiki-link", @"title": @"Add wiki link", @"symbol": @"doc.badge.plus" },
         ];
     }
 
