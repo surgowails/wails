@@ -98,7 +98,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         ]];
         NSArray<NSArray<NSString *> *> *parents = @[
             @[@"format", @"Formatting", @"textformat"],
-            @[@"insert", @"Insert", @"plus"],
+            @[@"insert", @"Insert", @"plus.square"],
             @[@"undo", @"Undo", @"arrow.counterclockwise"],
         ];
         for (NSArray<NSString *> *parent in parents) {
