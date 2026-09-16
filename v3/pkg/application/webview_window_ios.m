@@ -54,6 +54,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 @property (nonatomic, strong) UIView *toolbar;
 @property (nonatomic, strong) UIView *commandPalette;
 @property (nonatomic, assign) CGFloat commandPaletteHeight;
+@property (nonatomic, assign) CGFloat commandPaletteGap;
 @end
 
 @implementation WailsEditorAccessoryView
@@ -61,6 +62,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     self = [super initWithFrame:CGRectMake(0, 0, 0, 50)];
     if (self) {
         _webView = webView;
+        _commandPaletteGap = 8.0;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         self.backgroundColor = [UIColor colorWithRed:37.0 / 255.0 green:37.0 / 255.0 blue:41.0 / 255.0 alpha:1.0];
         self.toolbar = [[UIView alloc] initWithFrame:CGRectZero];
@@ -114,7 +116,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     }
     return self;
 }
-- (CGSize)intrinsicContentSize { return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight); }
+- (CGSize)intrinsicContentSize {
+    CGFloat paletteGap = self.commandPaletteHeight > 0 ? self.commandPaletteGap : 0;
+    return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight + paletteGap);
+}
 - (void)showCommandPalette:(UIButton *)button {
     NSArray<NSDictionary<NSString *, NSString *> *> *items;
     NSInteger columns;
@@ -149,7 +154,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (void)showEmbeddedCommandPaletteWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items columns:(NSInteger)columns {
     [self.commandPalette removeFromSuperview];
     NSInteger rowCount = (items.count + columns - 1) / columns;
-    self.commandPaletteHeight = rowCount * 52.0 + 16.0;
+    self.commandPaletteHeight = rowCount * 50.0 + 14.0;
 
     UIView *palette = [[UIView alloc] initWithFrame:CGRectZero];
     palette.translatesAutoresizingMaskIntoConstraints = NO;
@@ -161,27 +166,27 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     self.commandPalette = palette;
     [NSLayoutConstraint activateConstraints:@[
         [palette.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
-        [palette.widthAnchor constraintEqualToConstant:columns * 62.0 + 16.0],
-        [palette.bottomAnchor constraintEqualToAnchor:self.toolbar.topAnchor],
+        [palette.widthAnchor constraintEqualToConstant:columns * 60.0 + 14.0],
+        [palette.bottomAnchor constraintEqualToAnchor:self.toolbar.topAnchor constant:-self.commandPaletteGap],
         [palette.heightAnchor constraintEqualToConstant:self.commandPaletteHeight],
     ]];
 
     UIStackView *grid = [[UIStackView alloc] initWithFrame:CGRectZero];
     grid.translatesAutoresizingMaskIntoConstraints = NO;
     grid.axis = UILayoutConstraintAxisVertical;
-    grid.spacing = 6;
+    grid.spacing = 5;
     grid.distribution = UIStackViewDistributionFillEqually;
     [palette addSubview:grid];
     [NSLayoutConstraint activateConstraints:@[
-        [grid.topAnchor constraintEqualToAnchor:palette.topAnchor constant:8],
-        [grid.leadingAnchor constraintEqualToAnchor:palette.leadingAnchor constant:8],
-        [grid.trailingAnchor constraintEqualToAnchor:palette.trailingAnchor constant:-8],
-        [grid.bottomAnchor constraintEqualToAnchor:palette.bottomAnchor constant:-8],
+        [grid.topAnchor constraintEqualToAnchor:palette.topAnchor constant:7],
+        [grid.leadingAnchor constraintEqualToAnchor:palette.leadingAnchor constant:7],
+        [grid.trailingAnchor constraintEqualToAnchor:palette.trailingAnchor constant:-7],
+        [grid.bottomAnchor constraintEqualToAnchor:palette.bottomAnchor constant:-7],
     ]];
     for (NSInteger rowStart = 0; rowStart < items.count; rowStart += columns) {
         UIStackView *row = [[UIStackView alloc] initWithFrame:CGRectZero];
         row.axis = UILayoutConstraintAxisHorizontal;
-        row.spacing = 6;
+        row.spacing = 5;
         row.distribution = UIStackViewDistributionFillEqually;
         [grid addArrangedSubview:row];
         for (NSInteger column = 0; column < columns; column++) {
