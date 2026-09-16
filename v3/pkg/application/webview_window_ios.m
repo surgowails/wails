@@ -194,8 +194,8 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             @{ @"command": @"highlight", @"title": @"Highlight", @"symbol": @"highlighter" },
             @{ @"command": @"bulleted-list", @"title": @"Bulleted list", @"symbol": @"list.bullet" },
             @{ @"command": @"numbered-list", @"title": @"Numbered list", @"symbol": @"list.number" },
-            @{ @"command": @"code-inline", @"title": @"Inline code", @"symbol": @"chevron.left.forwardslash.chevron.right" },
-            @{ @"command": @"code-block", @"title": @"Code block", @"symbol": @"curlybraces" },
+            @{ @"command": @"code-inline", @"title": @"Inline code", @"symbol": @"curlybraces" },
+            @{ @"command": @"code-block", @"title": @"Code block", @"symbol": @"ellipsis.curlybraces" },
         ];
     } else {
         columns = 4;
