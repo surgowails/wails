@@ -53,6 +53,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 @property (nonatomic, weak) WailsWebView *webView;
 @property (nonatomic, strong) UIView *toolbar;
 @property (nonatomic, strong) UIView *commandPalette;
+@property (nonatomic, strong) UIControl *paletteDismissOverlay;
 @property (nonatomic, assign) CGFloat commandPaletteHeight;
 @property (nonatomic, assign) CGFloat commandPaletteGap;
 @end
@@ -168,8 +169,22 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 - (void)showEmbeddedCommandPaletteWithItems:(NSArray<NSDictionary<NSString *, NSString *> *> *)items columns:(NSInteger)columns {
     [self.commandPalette removeFromSuperview];
+    [self.paletteDismissOverlay removeFromSuperview];
     NSInteger rowCount = (items.count + columns - 1) / columns;
     self.commandPaletteHeight = rowCount * 50.0 + 14.0;
+
+    UIControl *dismissOverlay = [[UIControl alloc] initWithFrame:CGRectZero];
+    dismissOverlay.translatesAutoresizingMaskIntoConstraints = NO;
+    dismissOverlay.accessibilityLabel = @"Dismiss editor menu";
+    [dismissOverlay addTarget:self action:@selector(dismissPaletteTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:dismissOverlay];
+    self.paletteDismissOverlay = dismissOverlay;
+    [NSLayoutConstraint activateConstraints:@[
+        [dismissOverlay.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [dismissOverlay.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [dismissOverlay.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [dismissOverlay.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+    ]];
 
     UIView *palette = [[UIView alloc] initWithFrame:CGRectZero];
     palette.translatesAutoresizingMaskIntoConstraints = NO;
@@ -230,8 +245,13 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (void)hideEmbeddedCommandPalette {
     [self.commandPalette removeFromSuperview];
     self.commandPalette = nil;
+    [self.paletteDismissOverlay removeFromSuperview];
+    self.paletteDismissOverlay = nil;
     self.commandPaletteHeight = 0;
     [self refreshAccessoryHeight];
+}
+- (void)dismissPaletteTapped {
+    [self hideEmbeddedCommandPalette];
 }
 - (void)commandTapped:(UIButton *)button {
     NSString *command = button.accessibilityIdentifier;
