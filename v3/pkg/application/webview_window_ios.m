@@ -120,6 +120,21 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     CGFloat paletteGap = self.commandPaletteHeight > 0 ? self.commandPaletteGap : 0;
     return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight + paletteGap);
 }
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    if ([super pointInside:point withEvent:event]) {
+        return YES;
+    }
+    return self.commandPalette && CGRectContainsPoint(self.commandPalette.frame, point);
+}
+- (void)refreshAccessoryHeight {
+    CGSize size = self.intrinsicContentSize;
+    CGRect frame = self.frame;
+    frame.size.height = size.height;
+    self.frame = frame;
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsLayout];
+    [self.webView reloadInputViews];
+}
 - (void)showCommandPalette:(UIButton *)button {
     NSArray<NSDictionary<NSString *, NSString *> *> *items;
     NSInteger columns;
@@ -210,15 +225,13 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
             [row addArrangedSubview:commandButton];
         }
     }
-    [self invalidateIntrinsicContentSize];
-    [self.webView reloadInputViews];
+    [self refreshAccessoryHeight];
 }
 - (void)hideEmbeddedCommandPalette {
     [self.commandPalette removeFromSuperview];
     self.commandPalette = nil;
     self.commandPaletteHeight = 0;
-    [self invalidateIntrinsicContentSize];
-    [self.webView reloadInputViews];
+    [self refreshAccessoryHeight];
 }
 - (void)commandTapped:(UIButton *)button {
     NSString *command = button.accessibilityIdentifier;
