@@ -19,10 +19,6 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 - (instancetype)initWithWebView:(WailsWebView *)webView;
 @end
 
-@interface WailsLinkInsertViewController : UIViewController <UIPopoverPresentationControllerDelegate, UITextFieldDelegate>
-- (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView;
-@end
-
 // Subclass that optionally replaces the browser's generic input bar with the
 // editor-specific accessory supplied by the frontend.
 @interface WailsWebView : WKWebView
@@ -53,7 +49,11 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 @property (nonatomic, weak) WailsWebView *webView;
 @property (nonatomic, strong) UIView *toolbar;
 @property (nonatomic, strong) UIView *commandPalette;
+@property (nonatomic, strong) UIView *inlineLinkPanel;
 @property (nonatomic, strong) UIControl *paletteDismissOverlay;
+@property (nonatomic, strong) UITextField *inlineLinkURLField;
+@property (nonatomic, strong) UITextField *inlineLinkLabelField;
+@property (nonatomic, strong) UIButton *inlineLinkInsertButton;
 @property (nonatomic, assign) CGFloat commandPaletteHeight;
 @property (nonatomic, assign) CGFloat commandPaletteGap;
 @end
@@ -125,7 +125,8 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     if ([super pointInside:point withEvent:event]) {
         return YES;
     }
-    return self.commandPalette && CGRectContainsPoint(self.commandPalette.frame, point);
+    return (self.commandPalette && CGRectContainsPoint(self.commandPalette.frame, point)) ||
+        (self.inlineLinkPanel && CGRectContainsPoint(self.inlineLinkPanel.frame, point));
 }
 - (void)refreshAccessoryHeight {
     CGSize size = self.intrinsicContentSize;
@@ -251,6 +252,10 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     [self refreshAccessoryHeight];
 }
 - (void)dismissPaletteTapped {
+    if (self.inlineLinkPanel) {
+        [self hideInlineLinkInsert];
+        return;
+    }
     [self hideEmbeddedCommandPalette];
 }
 - (void)commandTapped:(UIButton *)button {
@@ -259,7 +264,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         [self hideEmbeddedCommandPalette];
     }
     if ([command isEqualToString:@"link"]) {
-        [self presentLinkInsert];
+        [self showInlineLinkInsert];
         return;
     }
     [self sendCommand:command];
@@ -269,140 +274,110 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
     NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'%@'}}));", command];
     [self.webView evaluateJavaScript:javascript completionHandler:nil];
 }
-- (UIViewController *)presenterForWebView {
-    for (WailsViewController *viewController in appDelegate.viewControllers) {
-        if (viewController.webView == self.webView) {
-            UIViewController *presenter = viewController;
-            while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed) {
-                presenter = presenter.presentedViewController;
-            }
-            return presenter;
-        }
-    }
-    return nil;
-}
-- (void)presentLinkInsert {
-    UIViewController *presenter = [self presenterForWebView];
-    if (!presenter || presenter.isBeingPresented || presenter.isBeingDismissed) return;
-    WailsLinkInsertViewController *controller = [[WailsLinkInsertViewController alloc]
-        initWithWebView:self.webView keyboardAccessoryView:self];
-    UIPopoverPresentationController *popover = controller.popoverPresentationController;
-    popover.sourceView = self.toolbar;
-    popover.sourceRect = CGRectMake(52, 0, 44, 50);
-    popover.permittedArrowDirections = UIPopoverArrowDirectionDown | UIPopoverArrowDirectionUp;
-    popover.delegate = controller;
-    [presenter presentViewController:controller animated:YES completion:nil];
-}
-@end
+- (void)showInlineLinkInsert {
+    self.commandPaletteHeight = 134;
 
-@interface WailsLinkInsertViewController ()
-@property (nonatomic, weak) WailsWebView *webView;
-@property (nonatomic, strong) UIView *keyboardAccessoryView;
-@property (nonatomic, strong) UITextField *urlField;
-@property (nonatomic, strong) UITextField *labelField;
-@property (nonatomic, strong) UIButton *insertButton;
-@end
+    UIControl *dismissOverlay = [[UIControl alloc] initWithFrame:CGRectZero];
+    dismissOverlay.translatesAutoresizingMaskIntoConstraints = NO;
+    dismissOverlay.accessibilityLabel = @"Dismiss link insertion";
+    [dismissOverlay addTarget:self action:@selector(dismissPaletteTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:dismissOverlay];
+    self.paletteDismissOverlay = dismissOverlay;
+    [NSLayoutConstraint activateConstraints:@[
+        [dismissOverlay.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [dismissOverlay.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [dismissOverlay.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [dismissOverlay.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+    ]];
 
-@implementation WailsLinkInsertViewController
-- (instancetype)initWithWebView:(WailsWebView *)webView keyboardAccessoryView:(UIView *)keyboardAccessoryView {
-    self = [super initWithNibName:nil bundle:nil];
-    if (self) {
-        _webView = webView;
-        _keyboardAccessoryView = keyboardAccessoryView;
-        self.modalPresentationStyle = UIModalPresentationPopover;
-        self.preferredContentSize = CGSizeMake(320, 148);
-    }
-    return self;
-}
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    self.view.layer.cornerRadius = 14;
-    self.view.layer.cornerCurve = kCACornerCurveContinuous;
-    self.view.layer.masksToBounds = YES;
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectZero];
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.backgroundColor = [UIColor colorWithRed:45.0 / 255.0 green:45.0 / 255.0 blue:49.0 / 255.0 alpha:1.0];
+    panel.layer.cornerRadius = 10;
+    panel.layer.cornerCurve = kCACornerCurveContinuous;
+    panel.layer.masksToBounds = YES;
+    [self addSubview:panel];
+    self.inlineLinkPanel = panel;
+    [NSLayoutConstraint activateConstraints:@[
+        [panel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
+        [panel.widthAnchor constraintEqualToConstant:254],
+        [panel.bottomAnchor constraintEqualToAnchor:self.toolbar.topAnchor constant:-self.commandPaletteGap],
+        [panel.heightAnchor constraintEqualToConstant:self.commandPaletteHeight],
+    ]];
 
     UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 8;
-    [self.view addSubview:stack];
+    stack.spacing = 6;
+    [panel addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:12],
-        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
-        [stack.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-12],
+        [stack.topAnchor constraintEqualToAnchor:panel.topAnchor constant:7],
+        [stack.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:7],
+        [stack.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-7],
+        [stack.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-7],
     ]];
 
-    self.urlField = [self textFieldWithPlaceholder:@"URL" keyboardType:UIKeyboardTypeURL returnKey:UIReturnKeyNext];
-    self.urlField.textContentType = UITextContentTypeURL;
-    self.urlField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    self.urlField.autocorrectionType = UITextAutocorrectionTypeNo;
-    self.labelField = [self textFieldWithPlaceholder:@"Description (optional)" keyboardType:UIKeyboardTypeDefault returnKey:UIReturnKeyDone];
-    [stack addArrangedSubview:self.urlField];
-    [stack addArrangedSubview:self.labelField];
+    self.inlineLinkURLField = [self inlineLinkTextFieldWithPlaceholder:@"URL" keyboardType:UIKeyboardTypeURL returnKey:UIReturnKeyNext];
+    self.inlineLinkURLField.textContentType = UITextContentTypeURL;
+    self.inlineLinkURLField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.inlineLinkURLField.autocorrectionType = UITextAutocorrectionTypeNo;
+    [self.inlineLinkURLField addTarget:self action:@selector(focusInlineLinkLabel) forControlEvents:UIControlEventEditingDidEndOnExit];
+    self.inlineLinkLabelField = [self inlineLinkTextFieldWithPlaceholder:@"Description (optional)" keyboardType:UIKeyboardTypeDefault returnKey:UIReturnKeyDone];
+    [self.inlineLinkLabelField addTarget:self action:@selector(insertInlineLink) forControlEvents:UIControlEventEditingDidEndOnExit];
+    [stack addArrangedSubview:self.inlineLinkURLField];
+    [stack addArrangedSubview:self.inlineLinkLabelField];
 
-    UIStackView *buttons = [[UIStackView alloc] initWithFrame:CGRectZero];
-    buttons.axis = UILayoutConstraintAxisHorizontal;
-    buttons.alignment = UIStackViewAlignmentCenter;
-    [stack addArrangedSubview:buttons];
-    UIView *spacer = [[UIView alloc] initWithFrame:CGRectZero];
-    [buttons addArrangedSubview:spacer];
-    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
-    [cancel setTitle:@"Cancel" forState:UIControlStateNormal];
-    [cancel addTarget:self action:@selector(cancelTapped) forControlEvents:UIControlEventTouchUpInside];
-    [buttons addArrangedSubview:cancel];
-    self.insertButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.insertButton setTitle:@"Insert" forState:UIControlStateNormal];
-    self.insertButton.configuration = [UIButtonConfiguration filledButtonConfiguration];
-    [self.insertButton addTarget:self action:@selector(insertTapped) forControlEvents:UIControlEventTouchUpInside];
-    [buttons addArrangedSubview:self.insertButton];
-    [self updateInsertEnabled];
+    self.inlineLinkInsertButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.inlineLinkInsertButton setTitle:@"Insert" forState:UIControlStateNormal];
+    self.inlineLinkInsertButton.configuration = [UIButtonConfiguration filledButtonConfiguration];
+    [self.inlineLinkInsertButton addTarget:self action:@selector(insertInlineLink) forControlEvents:UIControlEventTouchUpInside];
+    [self.inlineLinkInsertButton.heightAnchor constraintEqualToConstant:36].active = YES;
+    [stack addArrangedSubview:self.inlineLinkInsertButton];
+    [self updateInlineLinkInsertEnabled];
+    [self refreshAccessoryHeight];
+    dispatch_async(dispatch_get_main_queue(), ^{ [self.inlineLinkURLField becomeFirstResponder]; });
 }
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self.urlField becomeFirstResponder];
-}
-- (UITextField *)textFieldWithPlaceholder:(NSString *)placeholder keyboardType:(UIKeyboardType)keyboardType returnKey:(UIReturnKeyType)returnKey {
+- (UITextField *)inlineLinkTextFieldWithPlaceholder:(NSString *)placeholder keyboardType:(UIKeyboardType)keyboardType returnKey:(UIReturnKeyType)returnKey {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectZero];
     field.borderStyle = UITextBorderStyleRoundedRect;
     field.placeholder = placeholder;
     field.keyboardType = keyboardType;
     field.returnKeyType = returnKey;
-    field.delegate = self;
-    field.inputAccessoryView = self.keyboardAccessoryView;
-    [field addTarget:self action:@selector(editingChanged) forControlEvents:UIControlEventEditingChanged];
-    [field.heightAnchor constraintEqualToConstant:40].active = YES;
+    field.inputAccessoryView = self;
+    [field addTarget:self action:@selector(updateInlineLinkInsertEnabled) forControlEvents:UIControlEventEditingChanged];
+    [field.heightAnchor constraintEqualToConstant:36].active = YES;
     return field;
 }
-- (void)editingChanged { [self updateInsertEnabled]; }
-- (void)updateInsertEnabled {
-    NSString *url = [self.urlField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    self.insertButton.enabled = url.length > 0;
+- (void)focusInlineLinkLabel {
+    [self.inlineLinkLabelField becomeFirstResponder];
 }
-- (void)cancelTapped { [self dismissViewControllerAnimated:YES completion:nil]; }
-- (void)insertTapped {
-    NSString *url = [self.urlField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+- (void)updateInlineLinkInsertEnabled {
+    NSString *url = [self.inlineLinkURLField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    self.inlineLinkInsertButton.enabled = url.length > 0;
+}
+- (void)hideInlineLinkInsert {
+    [self.inlineLinkPanel removeFromSuperview];
+    self.inlineLinkPanel = nil;
+    self.inlineLinkURLField = nil;
+    self.inlineLinkLabelField = nil;
+    self.inlineLinkInsertButton = nil;
+    [self.paletteDismissOverlay removeFromSuperview];
+    self.paletteDismissOverlay = nil;
+    self.commandPaletteHeight = 0;
+    [self refreshAccessoryHeight];
+}
+- (void)insertInlineLink {
+    NSString *url = [self.inlineLinkURLField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (!url.length) return;
-    NSString *label = [self.labelField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *label = [self.inlineLinkLabelField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     NSError *error = nil;
     NSData *data = [NSJSONSerialization dataWithJSONObject:@{ @"url": url, @"label": label } options:0 error:&error];
     if (error || !data) return;
     NSString *payload = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    [self hideInlineLinkInsert];
     NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:{command:'link-insert',payload:%@}}));", payload];
-    [self dismissViewControllerAnimated:YES completion:^{ [self.webView evaluateJavaScript:javascript completionHandler:nil]; }];
+    [self.webView evaluateJavaScript:javascript completionHandler:nil];
 }
-- (BOOL)textFieldShouldReturn:(UITextField *)textField {
-    if (textField == self.urlField) {
-        [self.labelField becomeFirstResponder];
-        return NO;
-    }
-    if (textField == self.labelField && self.insertButton.enabled) {
-        [self insertTapped];
-        return NO;
-    }
-    return YES;
-}
-- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller { return UIModalPresentationNone; }
 @end
 
 @interface WailsEditorAccessoryHandler : NSObject <WKScriptMessageHandler>
