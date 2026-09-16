@@ -45,7 +45,48 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 }
 @end
 
+@interface WailsEditorPhotoLibraryDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, weak) WailsWebView *webView;
+@end
+
+static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
+
+@implementation WailsEditorPhotoLibraryDelegate
+- (void)imagePickerController:(UIImagePickerController *)picker
+        didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    UIImage *image = info[UIImagePickerControllerOriginalImage];
+    NSData *imageData = UIImageJPEGRepresentation(image, 0.9);
+    if (!imageData.length || !self.webView) {
+        activeEditorPhotoLibraryDelegate = nil;
+        return;
+    }
+
+    NSString *fileName = [NSString stringWithFormat:@"editor_image_%@.jpg", [[NSUUID UUID] UUIDString]];
+    NSString *filePath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    if (![imageData writeToFile:filePath options:NSDataWritingAtomic error:nil]) {
+        activeEditorPhotoLibraryDelegate = nil;
+        return;
+    }
+
+    NSDictionary *detail = @{ @"command": @"image-picked", @"payload": @{ @"filePath": filePath } };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:detail options:0 error:nil];
+    NSString *json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    if (json.length) {
+        NSString *javascript = [NSString stringWithFormat:@"window.dispatchEvent(new CustomEvent('multisafe:editor-accessory-command',{detail:%@}));", json];
+        [self.webView evaluateJavaScript:javascript completionHandler:nil];
+    }
+    activeEditorPhotoLibraryDelegate = nil;
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    activeEditorPhotoLibraryDelegate = nil;
+}
+@end
+
 @interface WailsEditorAccessoryView ()
+- (void)showPhotoLibrary;
 @property (nonatomic, weak) WailsWebView *webView;
 @property (nonatomic, strong) UIView *toolbar;
 @property (nonatomic, strong) UIView *commandPalette;
@@ -267,7 +308,33 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
         [self showInlineLinkInsert];
         return;
     }
+    if ([command isEqualToString:@"image"]) {
+        [self showPhotoLibrary];
+        return;
+    }
     [self sendCommand:command];
+}
+
+- (void)showPhotoLibrary {
+    if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        return;
+    }
+
+    UIViewController *presenter = self.webView.window.rootViewController;
+    while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed) {
+        presenter = presenter.presentedViewController;
+    }
+    if (!presenter) {
+        return;
+    }
+
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.mediaTypes = @[ @"public.image" ];
+    activeEditorPhotoLibraryDelegate = [[WailsEditorPhotoLibraryDelegate alloc] init];
+    activeEditorPhotoLibraryDelegate.webView = self.webView;
+    picker.delegate = activeEditorPhotoLibraryDelegate;
+    [presenter presentViewController:picker animated:YES completion:nil];
 }
 - (void)sendCommand:(NSString *)command {
     if (!command.length || !self.webView) return;
