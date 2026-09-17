@@ -102,7 +102,7 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 
 @implementation WailsEditorAccessoryView
 - (instancetype)initWithWebView:(WailsWebView *)webView {
-    self = [super initWithFrame:CGRectMake(0, 0, 0, 50)];
+    self = [super initWithFrame:CGRectMake(0, 0, 0, 44)];
     if (self) {
         _webView = webView;
         _commandPaletteGap = 8.0;
@@ -116,7 +116,7 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             [self.toolbar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.toolbar.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
             [self.toolbar.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-            [self.toolbar.heightAnchor constraintEqualToConstant:50],
+            [self.toolbar.heightAnchor constraintEqualToConstant:44],
         ]];
         UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
         stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -159,7 +159,7 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 }
 - (CGSize)intrinsicContentSize {
     CGFloat paletteGap = self.commandPaletteHeight > 0 ? self.commandPaletteGap : 0;
-    return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight + paletteGap);
+    return CGSizeMake(UIViewNoIntrinsicMetric, 44 + self.commandPaletteHeight + paletteGap);
 }
 - (void)dismissKeyboardTapped:(UIButton *)button {
     [self dismissOpenPalette];
