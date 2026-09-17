@@ -132,6 +132,7 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             @[@"format", @"Formatting", @"textformat"],
             @[@"insert", @"Insert", @"plus.square"],
             @[@"undo", @"Undo", @"arrow.counterclockwise"],
+            @[@"dismiss-keyboard", @"Dismiss keyboard", @"chevron.down.square"],
         ];
         for (NSArray<NSString *> *parent in parents) {
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -139,7 +140,14 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             button.accessibilityIdentifier = parent[0];
             button.tintColor = [UIColor colorWithRed:199.0 / 255.0 green:199.0 / 255.0 blue:204.0 / 255.0 alpha:1.0];
             [button setImage:[UIImage systemImageNamed:parent[2]] forState:UIControlStateNormal];
-            SEL action = [parent[0] isEqualToString:@"undo"] ? @selector(commandTapped:) : @selector(showCommandPalette:);
+            SEL action = nil;
+            if ([parent[0] isEqualToString:@"undo"]) {
+                action = @selector(commandTapped:);
+            } else if ([parent[0] isEqualToString:@"dismiss-keyboard"]) {
+                action = @selector(dismissKeyboardTapped:);
+            } else {
+                action = @selector(showCommandPalette:);
+            }
             [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
             [button.widthAnchor constraintEqualToConstant:44].active = YES;
             [button.heightAnchor constraintEqualToConstant:44].active = YES;
@@ -151,6 +159,17 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 - (CGSize)intrinsicContentSize {
     CGFloat paletteGap = self.commandPaletteHeight > 0 ? self.commandPaletteGap : 0;
     return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight + paletteGap);
+}
+- (void)dismissKeyboardTapped:(UIButton *)button {
+    if (self.inlineLinkPanel) {
+        [self hideInlineLinkInsert];
+    } else if (self.commandPalette) {
+        [self hideEmbeddedCommandPalette];
+    }
+    [[UIApplication sharedApplication] sendAction:@selector(resignFirstResponder)
+                                               to:nil
+                                             from:nil
+                                         forEvent:nil];
 }
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     if ([super pointInside:point withEvent:event]) {
