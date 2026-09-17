@@ -106,7 +106,7 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
         _webView = webView;
         _commandPaletteGap = 8.0;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-        self.backgroundColor = [UIColor colorWithRed:37.0 / 255.0 green:37.0 / 255.0 blue:41.0 / 255.0 alpha:1.0];
+        self.backgroundColor = [UIColor colorWithRed:45.0 / 255.0 green:45.0 / 255.0 blue:49.0 / 255.0 alpha:1.0];
         self.toolbar = [[UIView alloc] initWithFrame:CGRectZero];
         self.toolbar.translatesAutoresizingMaskIntoConstraints = NO;
         self.toolbar.backgroundColor = self.backgroundColor;
@@ -116,16 +116,6 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             [self.toolbar.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
             [self.toolbar.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
             [self.toolbar.heightAnchor constraintEqualToConstant:50],
-        ]];
-        UIView *separator = [[UIView alloc] initWithFrame:CGRectZero];
-        separator.backgroundColor = [UIColor colorWithRed:62.0 / 255.0 green:62.0 / 255.0 blue:66.0 / 255.0 alpha:1.0];
-        separator.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.toolbar addSubview:separator];
-        [NSLayoutConstraint activateConstraints:@[
-            [separator.leadingAnchor constraintEqualToAnchor:self.toolbar.leadingAnchor],
-            [separator.trailingAnchor constraintEqualToAnchor:self.toolbar.trailingAnchor],
-            [separator.topAnchor constraintEqualToAnchor:self.toolbar.topAnchor],
-            [separator.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
         ]];
         UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
         stack.translatesAutoresizingMaskIntoConstraints = NO;
