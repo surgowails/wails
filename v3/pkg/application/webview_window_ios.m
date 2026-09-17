@@ -130,9 +130,9 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
             [stack.bottomAnchor constraintEqualToAnchor:self.toolbar.bottomAnchor],
         ]];
         NSArray<NSArray<NSString *> *> *parents = @[
+            @[@"undo", @"Undo", @"arrow.counterclockwise"],
             @[@"format", @"Formatting", @"textformat"],
             @[@"insert", @"Insert", @"plus.square"],
-            @[@"undo", @"Undo", @"arrow.counterclockwise"],
             @[@"dismiss-keyboard", @"Dismiss keyboard", @"chevron.down.square"],
         ];
         for (NSArray<NSString *> *parent in parents) {
