@@ -17,6 +17,7 @@ static NSMutableArray<NSString *> *pendingConsoleJS;
 
 @interface WailsEditorAccessoryView : UIView
 - (instancetype)initWithWebView:(WailsWebView *)webView;
+- (void)dismissOpenPalette;
 @end
 
 // Subclass that optionally replaces the browser's generic input bar with the
@@ -161,15 +162,18 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
     return CGSizeMake(UIViewNoIntrinsicMetric, 50 + self.commandPaletteHeight + paletteGap);
 }
 - (void)dismissKeyboardTapped:(UIButton *)button {
+    [self dismissOpenPalette];
+    [[UIApplication sharedApplication] sendAction:@selector(resignFirstResponder)
+                                               to:nil
+                                             from:nil
+                                         forEvent:nil];
+}
+- (void)dismissOpenPalette {
     if (self.inlineLinkPanel) {
         [self hideInlineLinkInsert];
     } else if (self.commandPalette) {
         [self hideEmbeddedCommandPalette];
     }
-    [[UIApplication sharedApplication] sendAction:@selector(resignFirstResponder)
-                                               to:nil
-                                             from:nil
-                                         forEvent:nil];
 }
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     if ([super pointInside:point withEvent:event]) {
@@ -462,7 +466,12 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 @implementation WailsEditorAccessoryHandler
 - (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
     if (![message.body isKindOfClass:[NSDictionary class]]) return;
-    BOOL visible = [((NSDictionary *)message.body)[@"visible"] boolValue];
+    NSDictionary *body = (NSDictionary *)message.body;
+    if ([body[@"dismissOpenPalette"] boolValue]) {
+        [self.webView.editorAccessoryView dismissOpenPalette];
+        return;
+    }
+    BOOL visible = [body[@"visible"] boolValue];
     self.webView.editorAccessoryVisible = visible;
 }
 @end
@@ -652,9 +661,11 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
     NSString *accessoryScript = @"(function(){"
         "function setVisible(visible){window.webkit.messageHandlers.editorAccessory.postMessage({visible:!!visible});}"
         "function update(){var active=document.activeElement;setVisible(!!(active&&active.closest&&!active.closest('[data-quick-entry]')&&active.closest('.note-editor-shell')));}"
+        "function dismissOpenPalette(){window.webkit.messageHandlers.editorAccessory.postMessage({dismissOpenPalette:true});}"
         "document.addEventListener('focusin',update,true);"
         "document.addEventListener('focusout',function(){setTimeout(update,0);},true);"
         "document.addEventListener('multisafe:atomic-editor-focus',function(event){setVisible(event.detail&&event.detail.visible);});"
+        "document.addEventListener('pointerdown',dismissOpenPalette,true);"
         "})();";
     WKUserScript *editorAccessoryScript = [[WKUserScript alloc] initWithSource:accessoryScript
         injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
