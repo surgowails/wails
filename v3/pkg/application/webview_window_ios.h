@@ -25,10 +25,11 @@ extern unsigned int nextWindowID;
 @end
 
 @class WailsEditorAccessoryHandler;
+@class WailsWebView;
 
 // Main view controller owning the WKWebView
 @interface WailsViewController : UIViewController <WKNavigationDelegate, UITabBarDelegate>
-@property (nonatomic, strong) WKWebView *webView;
+@property (nonatomic, strong) WailsWebView *webView;
 @property (nonatomic, strong) WailsSchemeHandler *schemeHandler;
 @property (nonatomic, strong) WailsMessageHandler *messageHandler;
 @property (nonatomic, strong) WailsEditorAccessoryHandler *editorAccessoryHandler;
