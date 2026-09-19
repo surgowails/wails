@@ -13,19 +13,11 @@ extern bool hasListeners(unsigned int);
 extern void cancelURLRequest(void *);
 // Buffer console messages until a WKWebView exists
 static NSMutableArray<NSString *> *pendingConsoleJS;
-@class WailsWebView;
-
 @interface WailsEditorAccessoryView : UIView
 - (instancetype)initWithWebView:(WailsWebView *)webView;
 - (void)dismissOpenPalette;
 @end
 
-// Subclass that optionally replaces the browser's generic input bar with the
-// editor-specific accessory supplied by the frontend.
-@interface WailsWebView : WKWebView
-@property (nonatomic, assign) BOOL editorAccessoryVisible;
-@property (nonatomic, strong) WailsEditorAccessoryView *editorAccessoryView;
-@end
 @implementation WailsWebView
 - (UIView *)inputAccessoryView {
     if (self.editorAccessoryVisible) {
