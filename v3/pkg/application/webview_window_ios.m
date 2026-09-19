@@ -459,6 +459,11 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 - (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
     if (![message.body isKindOfClass:[NSDictionary class]]) return;
     NSDictionary *body = (NSDictionary *)message.body;
+    NSString *debugMessage = body[@"debug"];
+    if ([debugMessage isKindOfClass:[NSString class]]) {
+        os_log(OS_LOG_DEFAULT, "[ios_touch_debug] %{public}@", debugMessage);
+        return;
+    }
     if ([body[@"dismissOpenPalette"] boolValue]) {
         [self.webView.editorAccessoryView dismissOpenPalette];
         return;
