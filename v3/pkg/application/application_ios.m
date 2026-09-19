@@ -51,8 +51,9 @@ bool ios_is_verbose_logging(void) { return g_verboseLogging; }
 // C interface implementation
 void ios_app_init(void) {
     // This will be called from Go's init
-    // Explicitly reference WailsAppDelegate to ensure the class is linked and registered.
+    // Explicitly reference the UIKit delegates to ensure both classes are linked and registered.
     (void)[WailsAppDelegate class];
+    (void)[WailsSceneDelegate class];
     // The actual UI startup happens via UIApplicationMain in main.m
 }
 

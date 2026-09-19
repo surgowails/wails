@@ -14,26 +14,16 @@ extern void WailsIOSMain(void);
 // requires this be set before launch finishes, hence the call below.
 extern void ios_notifications_init(void);
 
-@implementation WailsAppDelegate
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // Set global appDelegate reference and bring up a window if needed
-    appDelegate = self;
-    if (self.window == nil) {
-        // Start the window with the launch-screen colour (a "LaunchBackground"
-        // colour asset, also referenced by UILaunchScreen) so there's no white
-        // flash between the launch screen and the first WebView paint. The Go
-        // options set the colour too, but that happens after this delegate runs,
-        // so it can't colour the initial window. Falls back to white if the
-        // asset isn't present.
-        UIColor *launchBG = [UIColor colorNamed:@"LaunchBackground"] ?: [UIColor whiteColor];
-        self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-        self.window.backgroundColor = launchBG;
-        UIViewController *rootVC = [[UIViewController alloc] init];
-        rootVC.view.backgroundColor = launchBG;
-        self.window.rootViewController = rootVC;
-        [self.window makeKeyAndVisible];
+static dispatch_once_t wailsGoMainOnce;
+
+static UIColor *WailsLaunchBackgroundColor(void) {
+    return [UIColor colorNamed:@"LaunchBackground"] ?: [UIColor whiteColor];
+}
+
+static void WailsApplyConfiguredBackgroundToWindow(UIWindow *window) {
+    if (!window) {
+        return;
     }
-    // Apply app-wide background colour if configured
     unsigned char r = 255, g = 255, b = 255, a = 255;
     if (ios_get_app_background_color(&r, &g, &b, &a)) {
         CGFloat fr = ((CGFloat)r) / 255.0;
@@ -41,12 +31,41 @@ extern void ios_notifications_init(void);
         CGFloat fb = ((CGFloat)b) / 255.0;
         CGFloat fa = ((CGFloat)a) / 255.0;
         UIColor *color = [UIColor colorWithRed:fr green:fg blue:fb alpha:fa];
-        self.window.backgroundColor = color;
-        self.window.rootViewController.view.backgroundColor = color;
+        window.backgroundColor = color;
+        window.rootViewController.view.backgroundColor = color;
     }
-    if (!self.viewControllers) {
-        self.viewControllers = [NSMutableArray array];
+}
+
+static UIWindow *WailsCreateInitialWindow(UIWindowScene *scene) {
+    UIColor *launchBG = WailsLaunchBackgroundColor();
+    UIWindow *window = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+    window.backgroundColor = launchBG;
+    UIViewController *rootVC = [[UIViewController alloc] init];
+    rootVC.view.backgroundColor = launchBG;
+    window.rootViewController = rootVC;
+    WailsApplyConfiguredBackgroundToWindow(window);
+    [window makeKeyAndVisible];
+    return window;
+}
+
+static void WailsEnsureViewControllerStorage(WailsAppDelegate *delegate) {
+    if (delegate && !delegate.viewControllers) {
+        delegate.viewControllers = [NSMutableArray array];
     }
+}
+
+static void WailsStartGoMainOnce(void) {
+    dispatch_once(&wailsGoMainOnce, ^{
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            WailsIOSMain();
+        });
+    });
+}
+
+@implementation WailsAppDelegate
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    appDelegate = self;
+    WailsEnsureViewControllerStorage(self);
     // Register the notification-center delegate before launch finishes so local
     // notifications appear while the app is foregrounded (otherwise iOS delivers
     // them silently and no banner is shown).
@@ -55,18 +74,28 @@ extern void ios_notifications_init(void);
     // this and emits ApplicationDidFinishLaunching from the Go side once the
     // event listeners are wired up - emitting it from here would race the Go
     // runtime's startup and the event could be dropped.
-    // Start the Go runtime NOW — only after UIKit has delivered the launch and
-    // the window exists. Starting Go earlier (concurrently with UIApplicationMain)
+    // In scene-based apps the first window is created by WailsSceneDelegate
+    // after this method returns. Keep a legacy non-scene path for older generated
+    // bundles so UIApplicationMain still has a visible window before Go starts.
+    if (self.window == nil && ![[[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"] isKindOfClass:[NSDictionary class]]) {
+        self.window = WailsCreateInitialWindow(nil);
+        WailsStartGoMainOnce();
+    }
+    // Start the Go runtime only after UIKit has delivered launch and a window
+    // exists. Starting Go earlier (concurrently with UIApplicationMain)
     // intermittently corrupts the FrontBoard launch handshake on a physical
     // device, so this method never fires (blank cold launch / 0x8BADF00D). Run it
     // on a background thread so app.Run()'s blocking loop never touches the main
     // thread. WailsIOSMain -> user main() -> app.Run(); the window's run() then
-    // creates the WebView (appDelegate/window are already set above).
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        WailsIOSMain();
-    });
+    // creates the WebView (appDelegate/window are already set by the delegate or
+    // scene delegate).
     return YES;
 }
+
+- (UISceneConfiguration *)application:(UIApplication *)application configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession options:(UISceneConnectionOptions *)options API_AVAILABLE(ios(13.0)) {
+    return [[UISceneConfiguration alloc] initWithName:@"Default Configuration" sessionRole:connectingSceneSession.role];
+}
+
 // GENERATED EVENTS START
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     if( hasListeners(EventApplicationDidBecomeActive) ) {
@@ -111,4 +140,43 @@ extern void ios_notifications_init(void);
 }
 
 // GENERATED EVENTS END
+@end
+
+@implementation WailsSceneDelegate
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions API_AVAILABLE(ios(13.0)) {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+        return;
+    }
+    WailsAppDelegate *delegate = (WailsAppDelegate *)UIApplication.sharedApplication.delegate;
+    appDelegate = delegate;
+    WailsEnsureViewControllerStorage(delegate);
+
+    self.window = WailsCreateInitialWindow((UIWindowScene *)scene);
+    delegate.window = self.window;
+    WailsStartGoMainOnce();
+}
+
+- (void)sceneDidBecomeActive:(UIScene *)scene API_AVAILABLE(ios(13.0)) {
+    if( hasListeners(EventApplicationDidBecomeActive) ) {
+        processApplicationEvent(EventApplicationDidBecomeActive, NULL);
+    }
+}
+
+- (void)sceneWillResignActive:(UIScene *)scene API_AVAILABLE(ios(13.0)) {
+    if( hasListeners(EventApplicationWillResignActive) ) {
+        processApplicationEvent(EventApplicationWillResignActive, NULL);
+    }
+}
+
+- (void)sceneWillEnterForeground:(UIScene *)scene API_AVAILABLE(ios(13.0)) {
+    if( hasListeners(EventApplicationWillEnterForeground) ) {
+        processApplicationEvent(EventApplicationWillEnterForeground, NULL);
+    }
+}
+
+- (void)sceneDidEnterBackground:(UIScene *)scene API_AVAILABLE(ios(13.0)) {
+    if( hasListeners(EventApplicationDidEnterBackground) ) {
+        processApplicationEvent(EventApplicationDidEnterBackground, NULL);
+    }
+}
 @end
