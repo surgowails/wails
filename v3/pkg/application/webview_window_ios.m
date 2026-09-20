@@ -594,8 +594,9 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 }
 @end
 // MARK: - WailsViewController
-@interface WailsViewController ()
+@interface WailsViewController () <UIGestureRecognizerDelegate>
 - (void)applySafeAreaCSSVariables;
+@property (nonatomic, strong) UIScreenEdgePanGestureRecognizer *sidebarEdgePanGestureRecognizer;
 @end
 
 @implementation WailsViewController
@@ -676,6 +677,17 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
     }
     self.webView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.webView.navigationDelegate = self;
+    // Observe, rather than cover, the left edge. The recognizer only emits an
+    // event after a deliberate horizontal drag, so ordinary editor taps remain
+    // owned by the WKWebView.
+    self.sidebarEdgePanGestureRecognizer = [[UIScreenEdgePanGestureRecognizer alloc]
+        initWithTarget:self action:@selector(handleSidebarEdgePan:)];
+    self.sidebarEdgePanGestureRecognizer.edges = UIRectEdgeLeft;
+    self.sidebarEdgePanGestureRecognizer.delegate = self;
+    self.sidebarEdgePanGestureRecognizer.cancelsTouchesInView = NO;
+    self.sidebarEdgePanGestureRecognizer.delaysTouchesBegan = NO;
+    self.sidebarEdgePanGestureRecognizer.delaysTouchesEnded = NO;
+    [self.view addGestureRecognizer:self.sidebarEdgePanGestureRecognizer];
     // Back/forward gestures
     self.webView.allowsBackForwardNavigationGestures = ios_is_back_forward_gestures_enabled();
     // Link preview
@@ -723,6 +735,27 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
     if (tabsEnabled) {
         [self enableNativeTabs:YES];
     }
+}
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    if (gestureRecognizer != self.sidebarEdgePanGestureRecognizer) {
+        return YES;
+    }
+
+    UIScreenEdgePanGestureRecognizer *edgePan = (UIScreenEdgePanGestureRecognizer *)gestureRecognizer;
+    CGPoint velocity = [edgePan velocityInView:self.view];
+    return velocity.x > 0 && fabs(velocity.x) > fabs(velocity.y);
+}
+- (void)handleSidebarEdgePan:(UIScreenEdgePanGestureRecognizer *)edgePan {
+    if (edgePan.state != UIGestureRecognizerStateEnded) {
+        return;
+    }
+
+    CGPoint translation = [edgePan translationInView:self.view];
+    if (translation.x < 64 || fabs(translation.x) <= fabs(translation.y)) {
+        return;
+    }
+
+    [self executeJavaScript:@"window.dispatchEvent(new CustomEvent('multisafe:ios-sidebar-edge-swipe'));"];
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
