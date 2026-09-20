@@ -12,18 +12,27 @@ package webview
 
 typedef void (^schemeTaskCaller)(id<WKURLSchemeTask>);
 
+static dispatch_queue_t WailsSchemeTaskResponseQueue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        queue = dispatch_queue_create("io.wails.scheme-task-response", DISPATCH_QUEUE_CONCURRENT);
+    });
+    return queue;
+}
+
 static bool urlSchemeTaskCall(void *wkUrlSchemeTask, schemeTaskCaller fn) {
     id<WKURLSchemeTask> urlSchemeTask = (__bridge id<WKURLSchemeTask>) wkUrlSchemeTask;
     if (urlSchemeTask == nil) {
         return false;
     }
 
-    // WKURLSchemeTask is UIKit-owned. Calling it directly from a Go worker can
-    // synchronously hop to the main thread and deadlock a concurrent scheme
-    // request. Retain the task until the queued callback has completed because
-    // the Go request may finish and release its reference first.
+    // Do not synchronously call into WebKit from a Go worker. Keeping these
+    // callbacks off the UIKit main queue also prevents large asset responses
+    // from starving gesture handling. Retain the task until its callback has
+    // completed because the Go request may release its reference first.
     CFRetain((CFTypeRef)urlSchemeTask);
-    dispatch_async(dispatch_get_main_queue(), ^{
+    dispatch_async(WailsSchemeTaskResponseQueue(), ^{
         @autoreleasepool {
             @try {
                 fn(urlSchemeTask);
