@@ -18,23 +18,24 @@ static bool urlSchemeTaskCall(void *wkUrlSchemeTask, schemeTaskCaller fn) {
         return false;
     }
 
-	@autoreleasepool {
-		@try {
-			fn(urlSchemeTask);
-		} @catch (NSException *exception) {
-			// This is very bad to detect a stopped schemeTask this should be implemented in a better way
-			// But it seems to be very tricky to not deadlock when keeping a lock curing executing fn()
-			// It seems like those call switch the thread back to the main thread and then deadlocks when they reentrant want
-			// to get the lock again to start another request or stop it.
-			if ([exception.reason isEqualToString: @"This task has already been stopped"]) {
-				return false;
-			}
-
-			@throw exception;
-		}
-
-		return true;
-	}
+    // WKURLSchemeTask is UIKit-owned. Calling it directly from a Go worker can
+    // synchronously hop to the main thread and deadlock a concurrent scheme
+    // request. Retain the task until the queued callback has completed because
+    // the Go request may finish and release its reference first.
+    CFRetain((CFTypeRef)urlSchemeTask);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @autoreleasepool {
+            @try {
+                fn(urlSchemeTask);
+            } @catch (NSException *exception) {
+                if (![exception.reason isEqualToString: @"This task has already been stopped"]) {
+                    NSLog(@"[Wails] scheme task callback failed: %@", exception);
+                }
+            }
+            CFRelease((CFTypeRef)urlSchemeTask);
+        }
+    });
+    return true;
 }
 
 static bool URLSchemeTaskDidReceiveData(void *wkUrlSchemeTask, void* data, int datalength) {
