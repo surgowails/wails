@@ -480,7 +480,12 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
     // Stream captured media (saved in NSTemporaryDirectory) straight from disk
     // with HTTP Range support, so <video> can stream/seek a clip of any length
     // without inlining it as a data URL.
-    NSLog(@"[WailsSchemeHandler] start task url=%@", urlSchemeTask.request.URL.absoluteString ?: @"");
+    NSString *requestURL = urlSchemeTask.request.URL.absoluteString ?: @"";
+    // Runtime bridge calls are frequent. Logging each one can noticeably slow a
+    // physical device while Xcode is attached.
+    if (![urlSchemeTask.request.URL.path hasPrefix:@"/wails/runtime"]) {
+        NSLog(@"[WailsSchemeHandler] start task url=%@", requestURL);
+    }
     if ([urlSchemeTask.request.URL.path hasPrefix:@"/__capture__/"]) {
         [self serveCaptureTask:urlSchemeTask];
         return;
@@ -555,7 +560,9 @@ static WailsEditorPhotoLibraryDelegate *activeEditorPhotoLibraryDelegate = nil;
 }
 - (void)webView:(WKWebView *)webView stopURLSchemeTask:(id<WKURLSchemeTask>)urlSchemeTask {
     cancelURLRequest((__bridge void*)urlSchemeTask);
-    NSLog(@"[WailsSchemeHandler] stop task url=%@", urlSchemeTask.request.URL.absoluteString ?: @"");
+    if (![urlSchemeTask.request.URL.path hasPrefix:@"/wails/runtime"]) {
+        NSLog(@"[WailsSchemeHandler] stop task url=%@", urlSchemeTask.request.URL.absoluteString ?: @"");
+    }
 }
 @end
 // MARK: - WailsMessageHandler

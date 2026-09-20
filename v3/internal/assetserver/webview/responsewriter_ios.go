@@ -12,39 +12,26 @@ package webview
 
 typedef void (^schemeTaskCaller)(id<WKURLSchemeTask>);
 
-static dispatch_queue_t WailsSchemeTaskResponseQueue(void) {
-    static dispatch_queue_t queue;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        queue = dispatch_queue_create("io.wails.scheme-task-response", DISPATCH_QUEUE_CONCURRENT);
-    });
-    return queue;
-}
-
 static bool urlSchemeTaskCall(void *wkUrlSchemeTask, schemeTaskCaller fn) {
     id<WKURLSchemeTask> urlSchemeTask = (__bridge id<WKURLSchemeTask>) wkUrlSchemeTask;
     if (urlSchemeTask == nil) {
         return false;
     }
 
-    // Do not synchronously call into WebKit from a Go worker. Keeping these
-    // callbacks off the UIKit main queue also prevents large asset responses
-    // from starving gesture handling. Retain the task until its callback has
-    // completed because the Go request may release its reference first.
-    CFRetain((CFTypeRef)urlSchemeTask);
-    dispatch_async(WailsSchemeTaskResponseQueue(), ^{
-        @autoreleasepool {
-            @try {
-                fn(urlSchemeTask);
-            } @catch (NSException *exception) {
-                if (![exception.reason isEqualToString: @"This task has already been stopped"]) {
-                    NSLog(@"[Wails] scheme task callback failed: %@", exception);
-                }
-            }
-            CFRelease((CFTypeRef)urlSchemeTask);
-        }
-    });
-    return true;
+	@autoreleasepool {
+		@try {
+			fn(urlSchemeTask);
+		} @catch (NSException *exception) {
+			// A stopped task can race with response delivery during navigation.
+			if ([exception.reason isEqualToString: @"This task has already been stopped"]) {
+				return false;
+			}
+
+			@throw exception;
+		}
+
+		return true;
+	}
 }
 
 static bool URLSchemeTaskDidReceiveData(void *wkUrlSchemeTask, void* data, int datalength) {
