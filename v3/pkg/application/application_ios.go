@@ -208,9 +208,11 @@ func (a *iosApp) run() error {
 			}
 		}
 
-		// Start the native system-event monitors (battery, network, lock, theme,
-		// app lifecycle, memory). They emit "system:*" custom events to JS.
-		C.ios_start_system_event_monitors()
+		// Disabled locally for iOS TestFlight builds: on iOS 18.7.x this native
+		// notification/reachability monitor path has been aborting during launch
+		// before the first webview paint. The app does not currently depend on
+		// these automatic system events, and runtime feature calls can still query
+		// battery/network state on demand through their explicit bridges.
 
 		// Emit the launch event now that listeners are wired and UIKit is up.
 		applicationEvents <- newApplicationEvent(events.IOS.ApplicationDidFinishLaunching)
