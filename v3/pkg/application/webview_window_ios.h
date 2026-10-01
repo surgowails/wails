@@ -24,13 +24,8 @@ extern unsigned int nextWindowID;
 - (instancetype)initWithWindowID:(unsigned int)windowID;
 @end
 
-@class WailsEditorAccessoryHandler;
-@class WailsEditorAccessoryView;
-
 // WKWebView subclass used by the iOS window implementation.
 @interface WailsWebView : WKWebView
-@property (nonatomic, assign) BOOL editorAccessoryVisible;
-@property (nonatomic, strong) WailsEditorAccessoryView *editorAccessoryView;
 @end
 
 // Main view controller owning the WKWebView
@@ -38,7 +33,6 @@ extern unsigned int nextWindowID;
 @property (nonatomic, strong) WailsWebView *webView;
 @property (nonatomic, strong) WailsSchemeHandler *schemeHandler;
 @property (nonatomic, strong) WailsMessageHandler *messageHandler;
-@property (nonatomic, strong) WailsEditorAccessoryHandler *editorAccessoryHandler;
 @property (nonatomic, assign) unsigned int windowID;
 - (void)enableNativeTabs:(BOOL)enabled;
 - (void)selectNativeTabIndex:(NSInteger)index;
